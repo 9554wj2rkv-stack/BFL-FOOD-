@@ -173,6 +173,26 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .toast span{min-width:0}
 .toast button{border:0;background:transparent;color:var(--on-btn);font-weight:800;text-decoration:underline;min-height:40px;padding:0 8px}
 .toast.plain{padding-right:18px}
+/* creatine (inside the budget card, under fluids) */
+.cr{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+.cr-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.cr-t{font-size:17px;font-weight:700;color:var(--ink)}
+.cr-s{font-size:15px;color:var(--muted)}
+.cr-nav{display:flex;align-items:center;gap:2px;flex:none}
+.cr-arrow{width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:var(--ink);display:grid;place-items:center;padding:0}
+.cr-arrow:disabled{opacity:.3}
+.cr-arrow svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.cr-day{font-size:15px;font-weight:700;min-width:78px;text-align:center;color:var(--ink-2)}
+.cr-check{display:flex;align-items:center;gap:14px;min-height:56px;padding:8px 14px;border:1.5px solid var(--line-2);border-radius:16px;cursor:pointer;font-size:18px;font-weight:700;color:var(--ink);-webkit-tap-highlight-color:transparent}
+.cr-check input{position:absolute;opacity:0;width:1px;height:1px}
+.cr-box{width:32px;height:32px;border-radius:9px;border:2px solid var(--line-2);display:grid;place-items:center;flex:none;background:var(--card)}
+.cr-box svg{width:22px;height:22px;fill:none;stroke:var(--on-btn);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+.cr-check.on{border-color:var(--ok)}
+.cr-check.on .cr-box{background:var(--ok);border-color:var(--ok)}
+.cr-check.on .cr-box svg{opacity:1;stroke:#fff}
+:root[data-app-theme="dark"] .cr-check.on .cr-box svg{stroke:#101010}
+.cr-check:has(input:focus-visible){outline:3px solid var(--prot);outline-offset:2px}
+.cr-ok{font-size:15px;font-weight:700;color:var(--ok);margin-top:-4px}
 /* brand */
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:-6px}
 .brand .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(155deg,#F23BA0,#C8137A);color:#fff;display:grid;place-items:center;font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:19px;flex:none;box-shadow:0 2px 6px rgba(200,19,122,.35)}
@@ -1191,6 +1211,24 @@ function recentItems(){
 }
 function shortName(n){n=String(n).replace(/\s*\(.*?\)\s*/g," ").trim();return n.length>22?n.slice(0,21)+"…":n;}
 
+/* ============================== CREATINE ============================== */
+/* One record per local calendar date in bflfood_creatine: {"YYYY-MM-DD":{g:6,at:…}}. Unchecking removes that date only.
+   Not food: never counted in calories, macros or fluids. */
+K.creatine="bflfood_creatine";var CREATINE_G=6;
+function creatineAll(){var c=DB.get(K.creatine,{});return c&&typeof c==="object"&&!Array.isArray(c)?c:{};}
+function creatineTaken(day){return !!creatineAll()[day];}
+function setCreatine(day,on){var c=creatineAll();if(on)c[day]={g:CREATINE_G,at:Date.now()};else delete c[day];DB.set(K.creatine,c);}
+function crDay(){var t=todayISO();if(!APP.crDay||APP.crDay>t)APP.crDay=t;return APP.crDay;}
+function creatineHTML(){
+  var day=crDay(),t=todayISO(),on=creatineTaken(day),isT=day===t,d=parseISO(day);
+  var y=parseISO(t);y.setDate(y.getDate()-1);
+  var lbl=isT?"Today":day===isoOf(y)?"Yesterday":d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",","");
+  return '<div class="cr" id="creatine"><div class="cr-top"><div><p class="cr-t">Creatine</p><p class="cr-s">Daily dose · '+CREATINE_G+' g</p></div>'
+    +'<div class="cr-nav" role="group" aria-label="Choose date"><button type="button" class="cr-arrow" data-cr-step="-1" aria-label="Previous day"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="cr-day" id="cr-day">'+esc(lbl)+'</span><button type="button" class="cr-arrow" data-cr-step="1" aria-label="Next day"'+(isT?' disabled':'')+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></div></div>'
+    +'<label class="cr-check'+(on?' on':'')+'"><input type="checkbox" id="cr-check"'+(on?' checked':'')+'><span class="cr-box" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>Taken '+(isT?'today':'this day')+'</span></label>'
+    +(on?'<p class="cr-ok" role="status">'+CREATINE_G+' g logged for '+(isT?'today':esc(lbl==="Yesterday"?"yesterday":lbl))+'</p>':'')+'</div>';
+}
+
 /* ============================== TODAY ============================== */
 function budgetHTML(f,R,t,day){
   var fl=dayFluid(day),h='<section class="card" id="budget" aria-label="Today\'s budget">';
@@ -1206,6 +1244,7 @@ function budgetHTML(f,R,t,day){
     }).join('');
   }
   h+='<div class="fluids"><span>Fluids today</span><b id="b-fluid">'+fmtK(fl)+' ml</b></div>';
+  h+=creatineHTML();
   if(t.missAny)h+='<p class="muted small" style="margin-top:-6px">Some items have no nutrition data, so real totals may be a little higher.</p>';
   return h+'</section>';
 }
@@ -1784,6 +1823,7 @@ function biConsistency(n){
   var logged=days.filter(function(d){return d.n;}),comp=logged.filter(function(d){return d.complete;});
   var o={n:n,R:R,days:days,logged:logged,complete:comp,partial:logged.filter(function(d){return !d.complete;}),enough:comp.length>=BI_MIN_COMPLETE};
   if(comp.length){o.avg={};NUTS.forEach(function(k){o.avg[k]=comp.reduce(function(s,d){return s+d.t[k];},0)/comp.length;});}
+  var CR=creatineAll();o.creatine={any:Object.keys(CR).length>0,taken:days.filter(function(d){return CR[d.day];}).map(function(d){return d.day;})};
   o.withMissing=comp.filter(function(d){return d.miss.kcal||d.miss.p||d.miss.c||d.miss.f;});
   o.fibReliable=comp.length>0&&comp.every(function(d){return !d.miss.fib;});
   if(R.protein!=null)o.protHit=comp.filter(function(d){return d.t.p>=R.protein;});
@@ -1952,6 +1992,7 @@ function bar(v,target,cls){if(v==null||!target)return "";var pc=Math.min(100,v/t
 function biSecConsistency(){
   var n=+(APP.bir||7),c=biConsistency(n),R=c.R,h='<div class="chips" role="group" aria-label="Period">'+[7,14,30].map(function(x){var on=n===x;return '<button type="button" class="chip'+(on?' on':'')+'" data-bir="'+x+'" aria-pressed="'+on+'">'+x+' days</button>';}).join('')+'</div>';
   h+='<div class="mc-stats"><div><b>'+c.logged.length+'</b><span>days logged</span></div><div><b>'+c.complete.length+'</b><span>complete</span></div><div><b>'+c.partial.length+'</b><span>partly logged</span></div></div>';
+  if(c.creatine.any)h+='<p class="small">Creatine taken on <b>'+c.creatine.taken.length+' of the last '+n+' days</b>.</p>';
   if(!c.logged.length)return h+'<p class="muted">Nothing logged in the last '+n+' days yet.</p>';
   if(!c.enough)h+='<p class="bi-note">Not enough complete days to identify a reliable trend yet.</p><p class="muted small">Averages only use days you mark complete, so a day with just breakfast logged isn\'t counted as a full day of eating. At least '+BI_MIN_COMPLETE+' complete days are needed.</p>';
   else{
@@ -2150,6 +2191,7 @@ document.addEventListener("click",function(ev){
   var t=ev.target.closest("button,[data-act]");if(!t)return;
   var a=t.getAttribute("data-act"),s=APP.sheet;
   if(t.hasAttribute("data-tab")){go(t.getAttribute("data-tab"));return;}
+  if(t.hasAttribute("data-cr-step")){var cd=parseISO(crDay());cd.setDate(cd.getDate()+(+t.getAttribute("data-cr-step")));var ni=isoOf(cd);if(ni<=todayISO()){APP.crDay=ni;render();}return;}
   if(t.hasAttribute("data-theme-set")){setUi({theme:t.getAttribute("data-theme-set")});applyTheme();render();return;}
   if(t.hasAttribute("data-strat")){var f=loadFuel(),ns=t.getAttribute("data-strat");if(f.strategy!==ns){f.strategy=ns;f.strategyStart=todayISO();saveFuel(f);}render();toast("Goal: "+STRAT_PILL[ns]);return;}
   if(t.hasAttribute("data-again")){var r=(APP.again||[])[+t.getAttribute("data-again")];if(r){var sl=slotForType("auto"),e=addToDay(r.food,r.qty,sl,r.spoon);render();toast("Added to "+sl,function(){removeEntry(e.id);render();toast("Removed");});}return;}
@@ -2218,6 +2260,7 @@ document.addEventListener("input",function(ev){
 });
 document.addEventListener("change",function(ev){
   var t=ev.target;
+  if(t.id==="cr-check"){setCreatine(crDay(),t.checked);render();return;}
   if(t.hasAttribute("data-cons")){var p=loadProfile(),id=t.getAttribute("data-cons");p.cons.forEach(function(c){if(c.id===id)c.status=t.value;});p.setup=true;saveProfile(p);toast("Food profile saved");return;}
 });
 document.addEventListener("keydown",function(ev){
@@ -2230,7 +2273,7 @@ applyTheme();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 
