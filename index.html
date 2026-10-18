@@ -220,6 +220,45 @@ textarea.sg-ta{min-height:90px}
 .sg-table td{vertical-align:top;padding:12px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
 .sg-table td small{display:block;color:var(--muted);font-size:14px}
 .sg-table .linkbtn{padding:0;min-height:0;text-align:left;font-size:17px}
+/* my body intelligence */
+.bi-card{padding:0;gap:0;overflow:hidden}
+.bi-head{width:100%;border:0;background:transparent;color:var(--ink);display:flex;align-items:flex-start;gap:12px;text-align:left;padding:18px}
+.bi-head>span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.bi-head b{font-size:20px;font-weight:800}
+.bi-head small{font-size:15px;color:var(--muted)}
+.bi-sum{font-size:16px;color:var(--ink-2);margin-top:6px;overflow-wrap:anywhere}
+.bi-chev{flex:none;margin-top:4px;color:var(--muted)}.bi-chev.up{transform:rotate(180deg)}
+.bi-card>details.fold{border:0;border-top:1px solid var(--line);border-radius:0}
+.bi-card .fold-b{gap:14px}
+.bi-note{font-size:17px;font-weight:700}
+.bi-obs{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:12px}
+.bi-obs p{font-size:17px;overflow-wrap:anywhere}
+.bi-cat{font-size:14px!important;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.bi-assoc{font-size:15px!important;font-weight:700;color:var(--ink-2)}
+.bi-why>summary{list-style:none;cursor:pointer;font-size:15px;font-weight:700;text-decoration:underline;text-underline-offset:3px;min-height:36px;display:flex;align-items:center}
+.bi-why>summary::-webkit-details-marker{display:none}
+.bi-why>div{background:var(--raise);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.bi-why>div p{font-size:15px}
+.bi-recs{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:15px;overflow-wrap:anywhere}
+.bi-hit{font-weight:700}
+.bi-days{display:flex;flex-direction:column}
+.bi-day{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding:10px 0}
+.bi-day>span{flex:1;min-width:0;font-size:17px;font-weight:700}
+.bi-day small{display:block;font-size:14px;color:var(--muted);font-weight:500}
+.bi-day .btn-line{min-height:42px;font-size:15px;padding:0 14px}
+.bi-sug{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.bi-sug>p{font-size:17px}
+.bi-sug-row{display:flex;align-items:center;gap:10px;padding:8px 0}
+.bi-sug-row .n{flex:1;min-width:0;font-size:17px;font-weight:700;overflow-wrap:anywhere}
+.bi-sug-row small{display:block;font-size:14px;font-weight:500;color:var(--muted)}
+.bi-sug-row .bi-caution{color:var(--warn);font-weight:700}
+.bi-sug-row .btn-line{min-height:44px;font-size:15px;padding:0 12px;white-space:nowrap}
+.bi-done{font-size:15px;color:var(--ok);font-weight:700;margin-top:-10px}
+.bi-mark{align-self:flex-start;font-size:15px;margin-top:-14px;color:var(--muted)}
+.bi-ctx{display:flex;flex-direction:column;gap:12px}
+.bi-ctx .seg button{min-height:44px}
+.bi-n{font-size:17px!important}.bi-v{font-size:17px!important}
+.bar.k i{background:var(--ink-2)}
 /* morning check */
 .mc-short{gap:12px}
 .mc-done{width:100%;display:flex;align-items:center;gap:12px;border:1.5px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:18px;padding:14px 16px;text-align:left;min-height:64px}
@@ -1140,7 +1179,7 @@ function addToDay(food,qty,slot,spoon){
   if(spoon)e.spoon=spoon;
   (D[day]=D[day]||[]).push(e);DB.set(K.diary,D);setUi({lastSlot:slot});return e;
 }
-function removeEntry(id){var D=loadDiary(),day=todayISO();D[day]=(D[day]||[]).filter(function(e){return e.id!==id;});DB.set(K.diary,D);}
+function removeEntry(id){var D=loadDiary(),day=todayISO();D[day]=(D[day]||[]).filter(function(e){return e.id!==id;});DB.set(K.diary,D);if(!D[day].length&&(dayStatusAll()[day]||{}).complete)setComplete(day,false);}
 function findEntry(id){return (loadDiary()[todayISO()]||[]).filter(function(e){return e.id===id;})[0];}
 function recentItems(){
   var D=loadDiary(),all=[];
@@ -1196,7 +1235,7 @@ function viewToday(){
   return '<header class="head"><span class="head-date">Today · '+esc(dateShort())+'</span>'+(R.kcal!=null?'<span class="pill">'+STRAT_PILL[f.strategy]+'</span>':'')+'</header>'
     +budgetHTML(f,R,t,day)
     +'<button type="button" class="btn-main" data-act="log">'+ICON.plus+'Log food or drink</button>'
-    +againHTML()+logHTML(day);
+    +againHTML()+logHTML(day)+completeTodayHTML(day)+biCardHTML();
 }
 
 /* ============================== FOODS ============================== */
@@ -1692,6 +1731,319 @@ document.addEventListener("change",function(ev){var t=ev.target,s=APP.sheet;if(t
 document.addEventListener("keydown",function(ev){var t=ev.target;if(ev.key==="Enter"&&t.getAttribute&&t.getAttribute("data-mf")==="symAdd"){ev.preventDefault();var b=$('[data-mca="add-sym"]');if(b)b.click();}});
 document.addEventListener("toggle",function(ev){var d=ev.target;if(d&&d.id==="mc-more"&&APP.sheet)APP.sheet.openMore=d.open;},true);
 
+/* ============================== MY BODY INTELLIGENCE ============================== */
+/* Deterministic, explainable rules over data you already log. Nothing here calls an outside service.
+   Reuses: bflfood_diary, bflfood_signals (Food Detective), bflfood_mornings, bflfood_progress (energy/hunger/
+   recovery/sleep 1–5, same fields as version 1), bflfood_fuel (targets), food profile.
+   New, small keys: bflfood_daystatus (days you marked complete), bflfood_insights (insight history).
+   Daily activity is stored on a bflfood_progress entry for that date (fields act, actNote), not a new log.
+   Missing values are never treated as zero; nothing is ever added to the diary automatically. */
+K.daystatus="bflfood_daystatus";K.insights="bflfood_insights";
+var BI_ACTS=[["strength","Strength training"],["cardio","Walking / cardio"],["rest","Rest day"],["other","Other activity"]];
+var BI_SCALES=[["energy","Energy","1 very low · 5 great"],["hunger","Hunger","1 not hungry · 5 very hungry"],["recovery","Recovery","1 very sore or tired · 5 fully recovered"]];
+var BI_MIN_COMPLETE=3;
+var BI_WIN={with:"when you noted the food",early:"0–6 hours after eating",same:"later the same day",mid:"6–24 hours after eating",morning:"the following morning",late:"24–48 hours after eating"};
+var BI_WIN_ORDER=["with","early","same","mid","morning","late"];
+function dayAdd(iso,n){var d=parseISO(iso);d.setDate(d.getDate()+n);return isoOf(d);}
+function lastDays(n){var t=todayISO(),a=[];for(var i=n-1;i>=0;i--)a.push(dayAdd(t,-i));return a;}
+function dShort(iso){var d=parseISO(iso);return d?d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",",""):iso;}
+function fmt1(n){return n==null?"n/a":String(r1(n)).replace(".",",");}
+function hm(t){var d=new Date(t);return String(d.getHours()).padStart(2,"0")+"."+String(d.getMinutes()).padStart(2,"0");}
+function plural(n,w,ws){return n+" "+(n===1?w:(ws||w+"s"));}
+/* ----- day status ----- */
+function dayStatusAll(){var s=DB.get(K.daystatus,{});return s&&typeof s==="object"&&!Array.isArray(s)?s:{};}
+function isComplete(day){return !!((loadDiary()[day]||[]).length&&(dayStatusAll()[day]||{}).complete);}
+function setComplete(day,v){var S=dayStatusAll();if(v)S[day]={complete:true,at:Date.now()};else delete S[day];DB.set(K.daystatus,S);}
+/* ----- daily context, reusing bflfood_progress ----- */
+function dayCtx(day){
+  var o={act:[],actNote:"",energy:null,hunger:null,recovery:null,sleep:null};
+  loadProg().filter(function(e){return e.date===day;}).sort(function(a,b){return (a.ctx?1:0)-(b.ctx?1:0);}).forEach(function(e){
+    ["energy","hunger","recovery","sleep"].forEach(function(k){if(e[k]!=null&&e[k]!=="")o[k]=+e[k];});
+    if(Array.isArray(e.act)&&e.ctx)o.act=e.act.slice();if(e.ctx&&e.actNote!=null)o.actNote=e.actNote;});
+  return o;
+}
+function setDayCtx(day,patch){
+  var P=loadProg(),e=P.filter(function(x){return x.date===day&&x.ctx;})[0];
+  if(!e){var cur=dayCtx(day);e={id:uid(),date:day,weight:null,waist:null,strength:"",hunger:cur.hunger,energy:cur.energy,sleep:null,recovery:cur.recovery,cycle:"",note:"",ctx:true,act:[],actNote:""};P.push(e);}
+  Object.keys(patch).forEach(function(k){e[k]=patch[k];});DB.set(K.progress,P);
+}
+/* sleep for a day: morning check first (good/ok/poor), else a 1–5 check-in value */
+function daySleep(day){
+  var m=loadMornings().filter(function(x){return String(x.at).slice(0,10)===day&&x.sleep;}).sort(function(a,b){return a.at<b.at?1:-1;})[0];
+  if(m)return m.sleep;var s=dayCtx(day).sleep;if(s==null)return null;return s>=4?"good":s<=2?"poor":"ok";
+}
+/* ----- per-day nutrition ----- */
+function dayStats(day,D){
+  var es=(D||loadDiary())[day]||[],t={kcal:0,p:0,c:0,f:0,fib:0},miss={kcal:0,p:0,c:0,f:0,fib:0},slots={};
+  es.forEach(function(e){var x=entryTotals(e);NUTS.forEach(function(k){t[k]+=x[k];if(x.miss[k])miss[k]+=x.miss[k];});
+    var s=e.slot||"Snacks";slots[s]=slots[s]||{p:0,n:0,miss:0};slots[s].p+=x.p;slots[s].n++;if(x.miss.p)slots[s].miss++;});
+  return {day:day,n:es.length,t:t,miss:miss,slots:slots,complete:es.length>0&&!!(dayStatusAll()[day]||{}).complete};
+}
+function biConsistency(n){
+  var R=calcFuel(loadFuel()),D=loadDiary(),days=lastDays(n).map(function(d){return dayStats(d,D);});
+  var logged=days.filter(function(d){return d.n;}),comp=logged.filter(function(d){return d.complete;});
+  var o={n:n,R:R,days:days,logged:logged,complete:comp,partial:logged.filter(function(d){return !d.complete;}),enough:comp.length>=BI_MIN_COMPLETE};
+  if(comp.length){o.avg={};NUTS.forEach(function(k){o.avg[k]=comp.reduce(function(s,d){return s+d.t[k];},0)/comp.length;});}
+  o.withMissing=comp.filter(function(d){return d.miss.kcal||d.miss.p||d.miss.c||d.miss.f;});
+  o.fibReliable=comp.length>0&&comp.every(function(d){return !d.miss.fib;});
+  if(R.protein!=null)o.protHit=comp.filter(function(d){return d.t.p>=R.protein;});
+  if(R.kcal!=null){o.above=comp.filter(function(d){return d.t.kcal>R.kcal*1.05;});o.below=comp.filter(function(d){return d.t.kcal<R.kcal*0.95;});o.near=comp.filter(function(d){return d.t.kcal>=R.kcal*0.95&&d.t.kcal<=R.kcal*1.05;});}
+  /* lowest-protein main meal on complete days with ≥2 of breakfast/lunch/dinner logged (and their protein known) */
+  var low={},eligible=0,lowDays={};
+  comp.forEach(function(d){var m=["Breakfast","Lunch","Dinner"].filter(function(s){return d.slots[s]&&!d.slots[s].miss;});if(m.length<2)return;eligible++;
+    var lo=m.reduce(function(a,b){return d.slots[b].p<d.slots[a].p?b:a;});low[lo]=(low[lo]||0)+1;(lowDays[lo]=lowDays[lo]||[]).push(d);});
+  var best=Object.keys(low).sort(function(a,b){return low[b]-low[a];})[0];
+  if(best&&low[best]>=3&&low[best]*2>eligible)o.lowMeal={slot:best,k:low[best],of:eligible,days:lowDays[best]};
+  return o;
+}
+/* ----- food & body: occasions and symptom reports ----- */
+function biOccasions(since){
+  var D=loadDiary(),out=[],fdBy={};
+  loadSignals().forEach(function(s){if(s.from&&s.from.id)(fdBy[s.from.id]=fdBy[s.from.id]||[]).push(s);});
+  Object.keys(D).forEach(function(day){if(day<since)return;(D[day]||[]).forEach(function(e){
+    var items=(e.items||[]).filter(function(it){return !(it.src==="drink"&&(it.ref==="water"||it.ref==="sparkling"));});
+    var t=e.at||parseISO(day).getTime()+12*3600000,mixed=(e.items||[]).length>1,fd=fdBy[e.id]||[];
+    items.forEach(function(it){var nm=String(it.name||"").trim();if(!nm)return;
+      out.push({key:norm(nm),name:nm,t:t,day:day,approx:!e.at,src:"diary",id:e.id+"|"+norm(nm),entryName:e.name,mixed:mixed,fd:fd});});
+  });});
+  loadSignals().forEach(function(s){var nm=String(s.what||"").trim();if(!nm)return;var day=String(s.at).slice(0,10);if(day<since)return;
+    if(s.from&&D[s.from.day]&&(D[s.from.day]||[]).some(function(e){return e.id===s.from.id;}))return; /* already counted as the diary entry */
+    out.push({key:norm(nm),name:nm,t:new Date(s.at).getTime(),day:day,approx:false,src:"signal",id:"s|"+s.id,entryName:nm,mixed:false,fd:[s]});});
+  return out.filter(function(o){return !isNaN(o.t);});
+}
+function biMornings(){return loadMornings().map(function(m){var t=new Date(m.at).getTime();
+  return {id:m.id,t:t,day:String(m.at).slice(0,10),sym:(m.sym||[]).map(function(s){return s.name;}),good:!!m.good,links:(m.links||[]).map(function(l){return norm(String(l.name||""));}),
+    ctx:[m.sleep==="poor"?"poor sleep":"",m.stress==="high"?"high stress":"",(m.ill||[]).length?"illness or allergy symptoms":"",m.cycle==="Period"||m.cycle==="Days before period"?"cycle ("+m.cycle.toLowerCase()+")":""].filter(Boolean)};}).filter(function(m){return !isNaN(m.t);});}
+function biWindow(o,m){
+  var dt=m.t-o.t;if(dt<=0||dt>48*3600000)return null;
+  var hh=new Date(m.t).getHours();if(m.day===dayAdd(o.day,1)&&hh>=4&&hh<12)return "morning";
+  if(dt<=6*3600000)return "early";if(m.day===o.day)return "same";if(dt<=24*3600000)return "mid";return "late";
+}
+/* reports per occasion: [{s, w, src, ref}] */
+function biReports(o,M){
+  var r=[];o.fd.forEach(function(s){sgRealSym(s).forEach(function(x){r.push({s:x,w:"with",src:"fd",ref:s});});});
+  M.forEach(function(m){var w=biWindow(o,m);if(!w)return;m.sym.forEach(function(x){r.push({s:x,w:w,src:"m",ref:m});});});
+  return r;
+}
+function evidence(k,n,mixed){if(n<2||k<1)return "Insufficient data";if(mixed)return "Mixed results";return k>=3?"Repeated observation":k>=2?"Early observation":"Insufficient data";}
+function biPatterns(){
+  var since=dayAdd(todayISO(),-90),O=biOccasions(since),M=biMornings(),by={};
+  O.forEach(function(o){o.rep=biReports(o,M);o.followed=M.filter(function(m){return biWindow(o,m);});(by[o.key]=by[o.key]||{key:o.key,name:o.name,occ:[]}).occ.push(o);});
+  var foods=Object.keys(by).map(function(k){return by[k];}),neg=[],pos=[];
+  foods.forEach(function(F){
+    var n=F.occ.length,cnt={};F.single=F.occ.filter(function(o){return !o.mixed;}).length;F.inMixed=n-F.single;
+    F.occ.forEach(function(o){var seen={};o.rep.forEach(function(r){var k=r.s+"|"+r.w;if(seen[k])return;seen[k]=1;cnt[k]=(cnt[k]||0)+1;});});
+    var best=Object.keys(cnt).sort(function(a,b){return cnt[b]-cnt[a]||BI_WIN_ORDER.indexOf(a.split("|")[1])-BI_WIN_ORDER.indexOf(b.split("|")[1]);})[0];
+    F.any=F.occ.filter(function(o){return o.rep.length;}).length;
+    if(best&&cnt[best]>=2&&n>=2){
+      var sw=best.split("|"),S=sw[0],W=sw[1],k=cnt[best];
+      var others=O.filter(function(o){return o.key!==F.key;}),ko=others.filter(function(o){return o.rep.some(function(r){return r.s===S&&r.w===W;});}).length;
+      var mixed=others.length>=3&&(k/n)<=(ko/others.length)+0.2;
+      var sup=F.occ.filter(function(o){return o.rep.some(function(r){return r.s===S&&r.w===W;});});
+      var ctxN={};sup.forEach(function(o){o.rep.forEach(function(r){if(r.s===S&&r.w===W&&r.src==="m")r.ref.ctx.forEach(function(c){ctxN[c]=(ctxN[c]||0)+1;});});});
+      var linked=M.filter(function(m){return m.links.indexOf(F.key)>=0&&m.sym.length;}).length;
+      neg.push({F:F,S:S,W:W,k:k,n:n,ko:ko,no:others.length,mixed:mixed,label:evidence(k,n,mixed),sup:sup,ctx:ctxN,linked:linked});
+    }
+    var withCheck=F.occ.filter(function(o){return o.followed.length;}).length,liked=F.occ.filter(function(o){return o.fd.some(function(s){return s.feel==="liked";});}).length;
+    if(n>=3&&F.any===0&&withCheck>=2)pos.push({F:F,n:n,withCheck:withCheck,liked:liked,label:"Repeated observation"});
+    else if(liked>=2&&F.any===0)pos.push({F:F,n:n,withCheck:withCheck,liked:liked,label:liked>=3?"Repeated observation":"Early observation"});
+  });
+  neg.sort(function(a,b){return (a.mixed?1:0)-(b.mixed?1:0)||b.k-a.k||b.n-a.n;});pos.sort(function(a,b){return b.n-a.n;});
+  var since30=dayAdd(todayISO(),-30),sc={};
+  M.filter(function(m){return m.day>=since30;}).forEach(function(m){m.sym.forEach(function(s){sc[s]=(sc[s]||0)+1;});});
+  loadSignals().filter(function(s){return String(s.at).slice(0,10)>=since30;}).forEach(function(s){sgRealSym(s).forEach(function(x){sc[x]=(sc[x]||0)+1;});});
+  return {neg:neg,pos:pos,occ:O.length,reports:M.filter(function(m){return m.sym.length;}).length+loadSignals().filter(function(s){return sgRealSym(s).length;}).length,
+    sym:Object.keys(sc).map(function(k){return {name:k,n:sc[k]};}).filter(function(x){return x.n>=2;}).sort(function(a,b){return b.n-a.n;}).slice(0,4)};
+}
+function negText(x){return esc(x.F.name)+" was recorded on "+plural(x.n,"occasion")+". "+esc(x.S)+" was recorded "+BI_WIN[x.W]+" on "+plural(x.k,"occasion")+".";}
+function occLine(o){return dShort(o.day)+(o.approx?"":" "+hm(o.t))+" · "+esc(o.entryName)+(o.mixed?" (mixed meal)":"")+(o.src==="signal"?" · Food Detective":"");}
+function negDetail(x){
+  var h='<ul class="bi-recs">'+x.F.occ.slice().sort(function(a,b){return b.t-a.t;}).map(function(o){
+    var r=o.rep.filter(function(r){return r.s===x.S&&r.w===x.W;})[0];
+    return '<li>'+occLine(o)+'<br><span class="'+(r?'bi-hit':'muted')+'">'+(r?(r.src==="m"?'Morning check '+dShort(r.ref.day)+' '+hm(r.ref.t)+': '+esc(x.S)+(r.ref.ctx.length?' · also noted '+esc(r.ref.ctx.join(", ")):''):'Food Detective: '+esc(x.S)+(r.ref.symAt?' · began '+esc(r.ref.symAt):'')):'No '+esc(x.S.toLowerCase())+' recorded '+BI_WIN[x.W])+'</span></li>';}).join('')+'</ul>';
+  return h;
+}
+/* ----- fuel & recovery ----- */
+function biFuel(){
+  var days=lastDays(30),D=loadDiary(),R=calcFuel(loadFuel()),rows=days.map(function(d){var c=dayCtx(d),st=dayStats(d,D);return {day:d,c:c,st:st,sleep:daySleep(d)};});
+  var str=rows.filter(function(r){return r.c.act.indexOf("strength")>=0;}),rest=rows.filter(function(r){return r.c.act.indexOf("rest")>=0&&r.c.act.indexOf("strength")<0&&r.c.act.indexOf("cardio")<0;});
+  var train=rows.filter(function(r){return r.c.act.indexOf("strength")>=0||r.c.act.indexOf("cardio")>=0;});
+  var o={R:R,rows:rows,str:str,rest:rest,train:train,obs:[]};
+  var sc=str.filter(function(r){return r.st.complete;}),rc=rest.filter(function(r){return r.st.complete;});
+  var av=function(L,f){var v=L.map(f).filter(function(x){return x!=null;});return v.length?v.reduce(function(a,b){return a+b;},0)/v.length:null;};
+  if(sc.length>=2){var ps=av(sc,function(r){return r.st.t.p;}),cs=av(sc,function(r){return r.st.t.c;});
+    o.obs.push({key:"fr-prot",text:"On your last "+sc.length+" completed strength-training days, your average protein intake was "+Math.round(ps)+" g"+(R.protein!=null?" (target "+R.protein+" g)":"")+"."+(rc.length>=2?" On "+rc.length+" completed rest days it was "+Math.round(av(rc,function(r){return r.st.t.p;}))+" g.":""),
+      recs:sc.map(function(r){return dShort(r.day)+": "+Math.round(r.st.t.p)+" g protein, "+Math.round(r.st.t.c)+" g carbs";}).concat(rc.length>=2?rc.map(function(r){return dShort(r.day)+" (rest): "+Math.round(r.st.t.p)+" g protein";}):[]),
+      calc:"Average of protein logged on days marked complete with Strength training ticked.",limits:(str.length-sc.length?plural(str.length-sc.length,"strength day")+" without a complete food log "+(str.length-sc.length===1?"was":"were")+" left out. ":"")+"Logged amounts may differ from what you actually ate."});
+    o.obs.push({key:"fr-carb",text:"Carbohydrates averaged "+Math.round(cs)+" g on those strength days"+(rc.length>=2?" and "+Math.round(av(rc,function(r){return r.st.t.c;}))+" g on rest days":"")+".",recs:[],calc:"Same days as above.",limits:"How much carbohydrate suits your training varies from person to person."});}
+  var low=train.filter(function(r){return r.c.energy!=null&&r.c.energy<=2;});
+  if(low.length>=2){var inc=low.filter(function(r){return !r.st.complete;}).length,ps2=low.filter(function(r){return r.sleep==="poor";}).length;
+    o.obs.push({key:"fr-low",text:"You reported low energy (1–2) on "+plural(low.length,"training day")+"."+(inc?" "+inc+(inc===1?" of these also had":" of these also had")+" an incomplete food log, so the reason can't be judged from these records.":"")+(ps2?" "+ps2+" also followed poor sleep.":""),
+      recs:low.map(function(r){return dShort(r.day)+": energy "+r.c.energy+(r.st.complete?", "+Math.round(r.st.t.kcal)+" kcal logged":", food log incomplete")+(r.sleep?", sleep "+r.sleep:"");}),calc:"Training days (strength or walking/cardio) with energy 1 or 2.",limits:"Low energy has many possible causes: sleep, stress, illness, training load, food and more."});}
+  var eS=str.filter(function(r){return r.c.energy!=null;}),eO=rows.filter(function(r){return r.c.energy!=null&&r.c.act.indexOf("strength")<0;});
+  if(eS.length>=2&&eO.length>=2)o.obs.push({key:"fr-energy",text:"Your reported energy averaged "+fmt1(av(eS,function(r){return r.c.energy;}))+" on strength days and "+fmt1(av(eO,function(r){return r.c.energy;}))+" on other days ("+eS.length+" and "+eO.length+" days). More observations are needed.",
+    recs:eS.concat(eO).map(function(r){return dShort(r.day)+": energy "+r.c.energy+(r.c.act.indexOf("strength")>=0?" (strength)":"");}),calc:"Average of your 1–5 energy ratings.",limits:"A handful of days can differ by chance."});
+  var h14=lastDays(14),a1=rows.filter(function(r){return h14.indexOf(r.day)>=0&&h14.indexOf(r.day)<7&&r.c.hunger!=null;}),a2=rows.filter(function(r){return h14.indexOf(r.day)>=7&&r.c.hunger!=null;});
+  if(a1.length>=3&&a2.length>=3)o.obs.push({key:"fr-hunger",text:"Hunger averaged "+fmt1(av(a1,function(r){return r.c.hunger;}))+" in the earlier week and "+fmt1(av(a2,function(r){return r.c.hunger;}))+" in the most recent week.",recs:a1.concat(a2).map(function(r){return dShort(r.day)+": hunger "+r.c.hunger;}),calc:"Average of your 1–5 hunger ratings, days 14–8 ago versus the last 7 days.",limits:"Hunger changes with sleep, stress, cycle, training and food choices."});
+  var gS=rows.filter(function(r){return r.sleep==="good"&&r.c.energy!=null;}),pS=rows.filter(function(r){return r.sleep==="poor"&&r.c.energy!=null;});
+  if(gS.length>=2&&pS.length>=2)o.obs.push({key:"fr-sleep",text:"Energy averaged "+fmt1(av(gS,function(r){return r.c.energy;}))+" after good sleep and "+fmt1(av(pS,function(r){return r.c.energy;}))+" after poor sleep.",recs:gS.concat(pS).map(function(r){return dShort(r.day)+": sleep "+r.sleep+", energy "+r.c.energy;}),calc:"Sleep from your morning checks (or 1–5 check-ins), energy from your daily check-in.",limits:"Only days with both values are used."});
+  var T=trend(loadProg());if(T&&!T.short)o.obs.push({key:"fr-weight",text:"Weight trend: "+signed(T.perWeek,2)+" kg per week over "+T.span+" days ("+T.n+" weigh-ins). Your targets aren't changed automatically.",recs:[],calc:"Straight-line trend through your weigh-ins from the last 5 weeks.",limits:"Water, salt, carbohydrate and the menstrual cycle move day-to-day weight."});
+  return o;
+}
+/* ----- What am I learning? (max 3) ----- */
+function biInsights(){
+  var c7=biConsistency(7),P=biPatterns(),Fu=biFuel(),L=[];
+  if(c7.enough&&c7.protHit){L.push({key:"n-prot7",cat:"Nutrition",text:"You reached your protein target on "+c7.protHit.length+" of your "+c7.complete.length+" completed days this week.",
+    recs:c7.complete.map(function(d){return dShort(d.day)+": "+Math.round(d.t.p)+" g protein"+(d.t.p>=c7.R.protein?" ✓":"")+(d.miss.p?" (some foods without a protein value)":"");}),
+    calc:"Protein at or above your current target of "+c7.R.protein+" g, on days you marked complete in the last 7 days.",limits:(c7.partial.length?plural(c7.partial.length,"partly logged day")+" left out. ":"")+"Compared with today's target, even if it was different earlier."});}
+  else if(c7.logged.length&&!c7.enough)L.push({key:"n-incomplete",cat:"Nutrition",text:"There isn't enough information yet: "+plural(c7.complete.length,"day")+" this week "+(c7.complete.length===1?"is":"are")+" marked complete. Mark days complete when everything you ate is logged.",recs:c7.logged.map(function(d){return dShort(d.day)+": "+plural(d.n,"entry","entries")+(d.complete?" · complete":" · not marked complete");}),calc:"Averages use only days you mark complete. At least "+BI_MIN_COMPLETE+" are needed.",limits:"A partly logged day would make your intake look lower than it was."});
+  var ng=P.neg.filter(function(x){return !x.mixed&&x.label!=="Insufficient data";})[0];
+  if(ng)L.push({key:"f-"+ng.F.key+"-"+ng.S,cat:"Food & body",text:"Your records suggest "+esc(ng.S.toLowerCase())+" was noted "+BI_WIN[ng.W]+" after "+ng.k+" of "+plural(ng.n,"time")+" you logged "+esc(ng.F.name)+". This may be worth observing.",
+    recs:ng.sup.map(function(o){return occLine(o);}),calc:ng.k+" of "+ng.n+" logged occasions in the last 90 days. After other foods: "+ng.ko+" of "+ng.no+".",limits:"A possible association, not a confirmed cause. Other things you ate, sleep, stress, illness or your cycle may play a part."});
+  else if(P.pos[0]){var ps=P.pos[0];L.push({key:"f-pos-"+ps.F.key,cat:"Food & body",text:esc(ps.F.name)+" was logged "+plural(ps.n,"time")+" with no symptoms reported afterwards"+(ps.liked?", and you marked it as liked "+plural(ps.liked,"time"):"")+".",recs:ps.F.occ.map(occLine),calc:"No Food Detective symptoms and no morning-check symptoms within 48 hours of these occasions; "+ps.withCheck+" were followed by a morning check.",limits:"No reported reaction doesn't prove a food suits you."});}
+  var fr=Fu.obs.filter(function(x){return x.key==="fr-energy"||x.key==="fr-prot"||x.key==="fr-low";})[0];
+  if(fr)L.push({key:fr.key,cat:"Recovery",text:fr.text,recs:fr.recs,calc:fr.calc,limits:fr.limits});
+  return L.slice(0,3);
+}
+function biRecordHistory(L){
+  var H=DB.get(K.insights,{items:[]});if(!H||!Array.isArray(H.items))H={items:[]};var today=todayISO(),keys={},changed=false;
+  L.forEach(function(x){keys[x.key]=1;var cur=H.items.filter(function(h){return h.key===x.key&&h.current;})[0];
+    if(cur&&cur.text===x.text){if(cur.last!==today){cur.last=today;changed=true;}x.first=cur.first;}
+    else{if(cur){cur.current=false;cur.ended=today;}H.items.push({id:uid(),key:x.key,cat:x.cat,text:x.text,first:today,last:today,current:true});x.first=today;changed=true;}});
+  H.items.forEach(function(h){if(h.current&&!keys[h.key]){h.current=false;h.ended=today;changed=true;}});
+  if(H.items.length>200){H.items=H.items.slice(-200);changed=true;}
+  if(changed)DB.set(K.insights,H);return L;
+}
+/* ----- smart suggestions ----- */
+function biFoodHistory(){
+  var D=loadDiary(),m={};
+  Object.keys(D).sort().forEach(function(day){(D[day]||[]).forEach(function(e){if(!e.items||e.items.length!==1)return;var it=e.items[0];if(it.src==="drink"&&(it.ref==="water"||it.ref==="sparkling"))return;
+    var r=itemRef(it),x=m[r]=m[r]||{n:0,slots:{}};x.n++;x.slots[e.slot]=(x.slots[e.slot]||0)+1;x.food=clone(it);delete x.food.qty;delete x.food.uid;x.qty=r1(it.qty*(e.factor||1));});});
+  return Object.keys(m).map(function(k){return m[k];});
+}
+function biSuggestions(){
+  var R=calcFuel(loadFuel()),t=dayTotals(todayISO()),out={list:[]};
+  if(R.protein==null)return out;var short=R.protein-t.p,left=R.kcal!=null?R.kcal-t.kcal:null;out.short=short;out.left=left;
+  if(short<15||(left!=null&&left<=50))return out;
+  var P=biPatterns(),negKeys={};P.neg.forEach(function(x){negKeys[x.F.key]=1;});
+  out.list=biFoodHistory().map(function(x){var pn=portion(x.food.per100,x.qty);x.p=pn.p;x.kcal=pn.kcal;var ck=checkFood(x.food);x.allergy=ck.hits.some(function(h){return h.level==="allergy";});
+      x.caution=ck.hits.filter(function(h){return h.level!=="allergy"&&h.level!=="tolerated"&&h.level!=="noteval";}).map(function(h){return h.c.name+" ("+STATUS_LABEL[h.level].toLowerCase()+")";});
+      x.noted=!!negKeys[norm(String(x.food.name||"").trim())];return x;})
+    .filter(function(x){return !x.allergy&&x.p!=null&&x.kcal!=null&&x.p>=8&&(left==null||x.kcal<=left+50);})
+    .sort(function(a,b){return (b.p/Math.max(b.kcal,1))-(a.p/Math.max(a.kcal,1))||b.n-a.n;}).slice(0,3);
+  return out;
+}
+/* ----- learn why ----- */
+function biLearn(){
+  var R=calcFuel(loadFuel()),T=trend(loadProg()),fl=dayFluid(todayISO());
+  return [["Protein and muscle","Protein supplies the building blocks your body uses to maintain and repair muscle. Enough protein together with strength training helps preserve muscle while you lose fat. Eating more protein on its own doesn't build muscle."+(R.protein!=null?" Your current daily protein target is "+R.protein+" g.":"")],
+    ["Carbohydrates and training","Carbohydrate is stored in muscles and the liver as glycogen, a main fuel for hard or longer training. Hard sessions can feel tougher when intake is low, though needs vary."+(R.carbs!=null?" Your current carbohydrate target is "+R.carbs+" g.":"")],
+    ["Dietary fat","Fat supplies essential fatty acids, helps you absorb vitamins A, D, E and K, and is part of every cell. Your plan keeps fat at no less than about 20% of your calories."+(R.fat!=null?" Your current fat target is "+R.fat+" g.":"")],
+    ["Fibre and digestion","Fibre from vegetables, fruit, pulses and whole grains adds bulk and supports regular digestion. Increase it gradually and drink enough, as a sudden increase can cause bloating. Many foods in the app have no fibre value, so fibre totals are often incomplete."],
+    ["Hydration","Your body needs water for temperature control, circulation and digestion. Needs vary with body size, heat and training, and food provides some water too. You've logged "+fmtK(fl)+" ml of drinks today."],
+    ["Meal timing","For body weight, your total intake over days and weeks matters most. Spreading protein over your meals is a practical habit. The exact timing matters less than being consistent."],
+    ["Energy balance","Weight changes over time when the energy you eat differs from the energy you use. Your calorie target is an estimate from a formula (Mifflin–St Jeor) and your activity, not an exact measurement of your needs."],
+    ["Weekly weight trends","Day-to-day weight moves with water, salt, carbohydrate, food in your gut and your cycle. Weekly averages show the real direction more clearly."+(T&&!T.short?" Your current trend is "+signed(T.perWeek,2)+" kg per week.":" A trend appears after about 2 weeks of weigh-ins.")],
+    ["Sensitivities versus allergies","A food allergy is an immune reaction that can be serious and is diagnosed by a doctor. A sensitivity or intolerance usually causes discomfort and often depends on the amount eaten. Your diary can show patterns worth discussing with a professional, but it can't diagnose either."]];
+}
+/* ----- rendering ----- */
+function whyHTML2(x){return '<details class="bi-why"><summary>Why am I seeing this?</summary><div>'+(x.recs&&x.recs.length?'<p class="lbl">Records used</p><ul class="bi-recs">'+x.recs.map(function(r){return '<li>'+r+'</li>';}).join('')+'</ul>':'')+'<p><b>How:</b> '+esc(x.calc)+'</p><p><b>Limits:</b> '+esc(x.limits)+'</p></div></details>';}
+function bar(v,target,cls){if(v==null||!target)return "";var pc=Math.min(100,v/target*100);return '<div class="bar '+cls+'"><i style="width:'+pc.toFixed(1)+'%"'+(cls==="k"&&v>target*1.05?' class="over"':'')+'></i></div>';}
+function biSecConsistency(){
+  var n=+(APP.bir||7),c=biConsistency(n),R=c.R,h='<div class="chips" role="group" aria-label="Period">'+[7,14,30].map(function(x){var on=n===x;return '<button type="button" class="chip'+(on?' on':'')+'" data-bir="'+x+'" aria-pressed="'+on+'">'+x+' days</button>';}).join('')+'</div>';
+  h+='<div class="mc-stats"><div><b>'+c.logged.length+'</b><span>days logged</span></div><div><b>'+c.complete.length+'</b><span>complete</span></div><div><b>'+c.partial.length+'</b><span>partly logged</span></div></div>';
+  if(!c.logged.length)return h+'<p class="muted">Nothing logged in the last '+n+' days yet.</p>';
+  if(!c.enough)h+='<p class="bi-note">Not enough complete days to identify a reliable trend yet.</p><p class="muted small">Averages only use days you mark complete, so a day with just breakfast logged isn\'t counted as a full day of eating. At least '+BI_MIN_COMPLETE+' complete days are needed.</p>';
+  else{
+    h+='<p class="lbl" style="margin:0">Daily average · '+plural(c.complete.length,"complete day")+'</p>';
+    h+=[["kcal","Calories",R.kcal," kcal",""],["p","Protein",R.protein," g","p"],["c","Carbohydrates",R.carbs," g","c"],["f","Fat",R.fat," g","f"]].map(function(m){var v=c.avg[m[0]];return '<div class="mrow"><div class="mrow-top"><span class="n bi-n">'+m[1]+'</span><span class="v bi-v">'+fmtK(v)+(m[2]!=null?' <span>/ '+fmtN(m[2])+m[3]+'</span>':m[3])+'</span></div>'+(m[2]!=null?bar(v,m[2],m[4]||"k"):'')+'</div>';}).join('');
+    h+='<p class="small">'+(c.fibReliable?'Fibre: <b>'+fmtK(c.avg.fib)+' g</b> a day.':'<span class="muted">Fibre isn\'t shown: some foods you logged have no fibre value.</span>')+'</p>';
+    var obs=[];
+    if(c.protHit)obs.push('Your protein target was reached on <b>'+c.protHit.length+' of '+c.complete.length+'</b> completed days.');
+    obs.push('Your average logged protein intake was <b>'+Math.round(c.avg.p)+' g</b>.');
+    if(c.above)obs.push('Calories: <b>'+c.above.length+'</b> above, <b>'+c.near.length+'</b> within 5% of and <b>'+c.below.length+'</b> below your target of '+fmtN(R.kcal)+' kcal.');
+    if(c.lowMeal)obs.push('Your lowest-protein main meal is often <b>'+c.lowMeal.slot.toLowerCase()+'</b> ('+c.lowMeal.k+' of '+c.lowMeal.of+' complete days with at least two main meals).');
+    h+='<ul class="sg-pat">'+obs.map(function(o){return '<li>'+o+'</li>';}).join('')+'</ul>';
+    if(c.withMissing.length)h+='<p class="muted small">'+plural(c.withMissing.length,"complete day")+' include'+(c.withMissing.length===1?'s':'')+' foods with unknown values. Those values aren\'t counted, so real intake may be a little higher.</p>';
+    h+=whyHTML2({recs:c.complete.map(function(d){return dShort(d.day)+": "+fmtK(d.t.kcal)+" kcal · "+Math.round(d.t.p)+" g protein · "+Math.round(d.t.c)+" g carbs · "+Math.round(d.t.f)+" g fat";}),calc:"Averages of the days you marked complete in the last "+n+" days, compared with your current targets. “Within 5%” counts as on target.",limits:"Logged amounts are estimates. Your calorie target is an estimate too, not an exact requirement."});
+  }
+  var todo=c.partial.slice().reverse().slice(0,7);
+  if(todo.length)h+='<div><p class="lbl">Days not marked complete</p><div class="bi-days">'+todo.map(function(d){return '<div class="bi-day"><span>'+dShort(d.day)+'<small>'+plural(d.n,"entry","entries")+' · '+fmtK(d.t.kcal)+' kcal logged</small></span><button type="button" class="btn-line" data-bi-complete="'+d.day+'">Mark complete</button></div>';}).join('')+'</div></div>';
+  /* suggestions */
+  var S=biSuggestions();
+  if(S.list.length){APP.biSug=S.list;h+='<div class="bi-sug"><p class="lbl">For today</p><p>You\'re about <b>'+Math.round(S.short)+' g</b> short of your protein target. Foods you\'ve logged before that could help:</p>'+S.list.map(function(x,i){return '<div class="bi-sug-row"><span class="n">'+esc(x.food.name)+'<small>'+fmtN(x.qty)+' '+x.food.unit+' · '+Math.round(x.p)+' g protein · '+fmtK(x.kcal)+' kcal</small>'+(x.caution.length?'<small class="bi-caution">In your food profile: '+esc(x.caution.join(", "))+'</small>':'')+(x.noted?'<small class="bi-caution">You\'ve noted symptoms after this before.</small>':'')+'</span><button type="button" class="btn-line" data-bi-add="'+i+'">Add to Today</button></div>';}).join('')
+    +(c.lowMeal&&c.lowMeal.slot==="Lunch"?'<p class="muted small">Lunch has often had the least protein. These could fit there too.</p>':'')+'<p class="muted small">Nothing is added until you confirm the amount. Confirmed allergens are never suggested.</p></div>';}
+  return h;
+}
+function biSecPatterns(){
+  var P=biPatterns(),h='';
+  if(!P.occ||!P.reports)return '<p class="bi-note">There isn\'t enough information yet.</p><p class="muted small">Patterns need foods in your diary or Food Detective, plus symptom reports from Food Detective or morning checks. Nothing is assumed from missing reports.</p>';
+  var show=P.neg.filter(function(x){return !x.mixed;}).slice(0,3),mixedL=P.neg.filter(function(x){return x.mixed;});
+  if(show.length)h+=show.map(function(x){return '<div class="bi-obs"><p><span class="sg-tag '+(x.mixed?'':'watch')+'">'+x.label+'</span></p><p>'+negText(x)+'</p><p class="muted small">'+x.k+' symptom report'+(x.k===1?'':'s')+' after '+plural(x.n,"logged occasion")+'.'+(x.mixed?' '+esc(x.S)+' was also recorded '+BI_WIN[x.W]+' after '+x.ko+' of '+x.no+' occasions of other foods.':'')+(x.F.inMixed?' Eaten on its own '+x.F.single+'×, in a mixed meal '+x.F.inMixed+'×.':'')+(x.linked?' You linked it yourself on '+plural(x.linked,"morning")+'.':'')+(Object.keys(x.ctx).length?' Those reports also noted: '+esc(Object.keys(x.ctx).map(function(k){return k+" ("+x.ctx[k]+")";}).join(", "))+'.':'')+'</p><p class="bi-assoc">Possible association — not a confirmed cause.</p><details class="bi-why"><summary>View entries</summary>'+negDetail(x)+'</details></div>';}).join('');
+  else h+='<p class="muted">No food stands out: none has been followed by the same symptom more often than other foods.</p>';
+  if(mixedL.length)h+='<div class="bi-obs"><p><span class="sg-tag">Mixed results</span></p><p class="small">'+esc(mixedL.slice(0,4).map(function(x){return x.F.name+" ("+x.S.toLowerCase()+" "+x.k+" of "+x.n+")";}).join(", "))+(mixedL.length>4?' and '+(mixedL.length-4)+' more':'')+'. The same symptoms also followed many other foods, so these records can\'t tell them apart.</p><details class="bi-why"><summary>View entries</summary>'+mixedL.slice(0,4).map(function(x){return '<p class="lbl" style="margin-top:6px">'+esc(x.F.name)+'</p>'+negDetail(x);}).join('')+'</details></div>';
+  if(P.pos.length)h+='<p class="lbl" style="margin-top:6px">Without reported symptoms</p>'+P.pos.slice(0,3).map(function(x){return '<div class="bi-obs"><p><span class="sg-tag in">'+x.label+'</span></p><p>'+esc(x.F.name)+' was logged '+plural(x.n,"time")+' with no symptoms reported within 48 hours'+(x.withCheck?' ('+x.withCheck+' followed by a morning check)':'')+(x.liked?'. You marked it liked '+plural(x.liked,"time"):'')+'.</p><details class="bi-why"><summary>View entries</summary><ul class="bi-recs">'+x.F.occ.map(function(o){return '<li>'+occLine(o)+'</li>';}).join('')+'</ul></details></div>';}).join('')+'<p class="muted small">No reported reaction doesn\'t prove a food suits you.</p>';
+  if(P.sym.length)h+='<p class="lbl" style="margin-top:6px">Symptoms you report most · last 30 days</p><ul class="sg-pat">'+P.sym.map(function(s){return '<li><b>'+esc(s.name)+'</b> <span class="cnt">'+plural(s.n,"report")+'</span></li>';}).join('')+'</ul>';
+  h+='<p class="muted small">Uses the last 90 days. Food times are when you logged them. Not every symptom is food-related, and nothing here diagnoses an allergy or intolerance. Confirmed allergies stay in Me → Food profile.</p>';
+  return h;
+}
+function biSecFuel(){
+  var day=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO(),c=dayCtx(day),Fu=biFuel();
+  var h='<div class="bi-ctx"><div class="head"><p class="lbl" style="margin:0">'+(APP.bictx==="y"?'Yesterday was':'Today was')+'</p><button type="button" class="linkbtn" data-bictx="'+(APP.bictx==="y"?'t':'y')+'" style="min-height:0;padding:0;font-size:15px">'+(APP.bictx==="y"?'Back to today':'Fill in yesterday')+'</button></div>'
+    +'<div class="chips">'+BI_ACTS.map(function(a){var on=c.act.indexOf(a[0])>=0;return '<button type="button" class="chip'+(on?' on':'')+'" data-bi-act="'+a[0]+'" aria-pressed="'+on+'">'+a[1]+'</button>';}).join('')+'</div>'
+    +'<input class="inp" id="bi-actnote" value="'+esc(c.actNote||"")+'" placeholder="Note (optional), e.g. legs, 45 min" aria-label="Activity note" autocomplete="off">'
+    +BI_SCALES.map(function(s){return '<div><p class="lbl" style="margin-bottom:6px">'+s[1]+' <span class="muted small" style="font-weight:500">'+s[2]+'</span></p><div class="seg">'+[1,2,3,4,5].map(function(v){var on=c[s[0]]===v;return '<button type="button" class="'+(on?'on':'')+'" data-bi-scale="'+s[0]+'" data-v="'+v+'" aria-pressed="'+on+'">'+v+'</button>';}).join('')+'</div></div>';}).join('')
+    +'<p class="muted small">Optional. Saved as you tap, alongside your weight check-ins.</p></div>';
+  if(Fu.obs.length)h+=Fu.obs.map(function(o){return '<div class="bi-obs"><p>'+esc(o.text)+'</p>'+(o.recs.length?whyHTML2(o):'<p class="muted small">'+esc(o.limits)+'</p>')+'</div>';}).join('');
+  else h+='<p class="muted">Observations appear after a few days with activity, check-ins and complete food logs.</p>';
+  return h;
+}
+function biSecLearning(L){
+  var h='';
+  if(!L.length)h+='<p class="bi-note">There isn\'t enough information yet.</p><p class="muted small">Insights come from complete days, Food Detective entries, morning checks and daily check-ins.</p>';
+  else h+=L.map(function(x){return '<div class="bi-obs"><p class="bi-cat">'+x.cat+(x.first===todayISO()?' · new today':' · since '+dShort(x.first))+'</p><p>'+x.text+'</p>'+whyHTML2(x)+'</div>';}).join('');
+  h+='<button type="button" class="btn-line" data-bi-all style="align-self:flex-start">See all insights</button>';
+  h+='<details class="fold bi-learn"><summary><span>Learn why</span></summary><div class="fold-b">'+biLearn().map(function(t){return '<details class="bi-why"><summary>'+esc(t[0])+'</summary><div><p>'+esc(t[1])+'</p></div></details>';}).join('')+'</div></details>';
+  return h;
+}
+function biCardHTML(){
+  var L=biRecordHistory(biInsights()),open=!!ui().biOpen,secOpen=(ui().open||{});
+  var sum=L[0]?L[0].text:"Mark days complete and log how you feel to see your patterns.";
+  var h='<section class="card bi-card" aria-label="My Body Intelligence"><button type="button" class="bi-head" data-bi-toggle aria-expanded="'+open+'"><span><b>My Body Intelligence</b><small>Your food. Your body. Your patterns.</small>'+(!open?'<span class="bi-sum">'+sum.replace(/<[^>]+>/g,"")+'</span>':'')+'</span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" class="bi-chev'+(open?' up':'')+'"><path d="M6 9l6 6 6-6"/></svg></button>';
+  if(open){
+    var sec=function(id,title,body,def){var o=id in secOpen?secOpen[id]:def;return '<details class="fold" data-fold="'+id+'"'+(o?' open':'')+'><summary><span>'+title+'</span></summary><div class="fold-b">'+body()+'</div></details>';};
+    h+=sec("bi-learning","What Am I Learning?",function(){return biSecLearning(L);},true)
+      +sec("bi-cons","Nutrition Consistency",biSecConsistency,false)
+      +sec("bi-pat","Food &amp; Body Patterns",biSecPatterns,false)
+      +sec("bi-fuel","Fuel &amp; Recovery",biSecFuel,false);
+  }
+  return h+'</section>';
+}
+function completeTodayHTML(day){
+  if(!(loadDiary()[day]||[]).length)return "";
+  return isComplete(day)?'<p class="bi-done">✓ Today is marked complete <button type="button" class="linkbtn" data-bi-uncomplete="'+day+'" style="min-height:0;padding:0 4px;font-size:15px">Undo</button></p>'
+    :'<button type="button" class="linkbtn bi-mark" data-bi-complete="'+day+'">Mark today complete</button>';
+}
+function insightsSheetHTML(){
+  var H=DB.get(K.insights,{items:[]}),I=(H&&H.items||[]).slice().reverse();
+  if(!I.length)return '<p class="empty">No insights yet.</p>';
+  return '<p class="muted small">Newest first. An insight that your records no longer support is marked as no longer current.</p>'+I.map(function(x){return '<div class="bi-obs"><p class="bi-cat">'+esc(x.cat)+' · '+dShort(x.first)+(x.current?(x.last!==x.first?' – '+dShort(x.last):'')+' · <b>current</b>':' – '+dShort(x.ended||x.last)+' · no longer current')+'</p><p'+(x.current?'':' class="muted"')+'>'+x.text+'</p></div>';}).join('');
+}
+/* ----- events ----- */
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("button");if(!t)return;
+  if(t.hasAttribute("data-bi-toggle")){setUi({biOpen:!ui().biOpen});render();return;}
+  if(t.hasAttribute("data-bir")){APP.bir=+t.getAttribute("data-bir");render();return;}
+  if(t.hasAttribute("data-bi-complete")){var d=t.getAttribute("data-bi-complete");setComplete(d,true);render();toast(d===todayISO()?"Today marked complete":dShort(d)+" marked complete",function(){setComplete(d,false);render();toast("Undone");});return;}
+  if(t.hasAttribute("data-bi-uncomplete")){setComplete(t.getAttribute("data-bi-uncomplete"),false);render();return;}
+  if(t.hasAttribute("data-bictx")){APP.bictx=t.getAttribute("data-bictx");render();return;}
+  if(t.hasAttribute("data-bi-act")){var day=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO(),a=dayCtx(day).act,v=t.getAttribute("data-bi-act"),i=a.indexOf(v);if(i>=0)a.splice(i,1);else{a.push(v);if(v==="rest")a=a.filter(function(x){return x!=="strength"&&x!=="cardio";});else if(v==="strength"||v==="cardio")a=a.filter(function(x){return x!=="rest";});}setDayCtx(day,{act:a});render();return;}
+  if(t.hasAttribute("data-bi-scale")){var day2=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO(),k=t.getAttribute("data-bi-scale"),val=+t.getAttribute("data-v"),p={};p[k]=dayCtx(day2)[k]===val?null:val;setDayCtx(day2,p);render();return;}
+  if(t.hasAttribute("data-bi-add")){var s=(APP.biSug||[])[+t.getAttribute("data-bi-add")];if(s){var f=clone(s.food);f.presets=f.presets||[];APP.sheet=null;openPortion(f,s.qty);}return;}
+  if(t.hasAttribute("data-bi-all")){openSheet({view:"insights"});return;}
+});
+document.addEventListener("change",function(ev){var t=ev.target;if(t.id==="bi-actnote"){var day=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO();setDayCtx(day,{actNote:t.value.trim()});}});
+
 
 /* ============================== render ============================== */
 var TABS=[["today","Today",'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'],["foods","Foods",'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'],["signals","Signals",'<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>'],["me","Me",'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>']];
@@ -1713,6 +2065,7 @@ function renderSheet(focus){
   if(s.view==="log"){title="Log food or drink";body=slotsHTML(s.slot)+'<label class="search">'+ICON.search+'<input id="s-q" type="search" placeholder="Search food, drink or barcode" value="'+esc(s.q||"")+'" autocomplete="off" aria-label="Search food, drink or barcode"></label><div id="s-res" class="res">'+foodsListHTML(s.q,"s")+'</div>';}
   else if(s.view==="portion"){title=s.food.name;back=!!s.from;body=portionHTML(s);}
   else if(s.view==="manual"){title="Enter label values";back=!!s.from;body=manualHTML(s);}
+  else if(s.view==="insights"){title="All insights";body=insightsSheetHTML();}
   else if(s.view==="morning"){title=s.d.id?"Edit morning check":"How do I feel today?";body=morningFormHTML(s);}
   else if(s.view==="signal"){title=s.d.id?"Edit entry":"Body Signals";body=signalFormHTML(s);}
   else if(s.view==="note"){var nn=loadNotes().filter(function(x){return x.id===s.id;})[0];if(!nn){closeSheet();return;}title="Edit note";body=noteEditHTML(nn,s);}
@@ -1877,7 +2230,7 @@ applyTheme();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 
