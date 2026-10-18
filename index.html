@@ -173,6 +173,38 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .toast span{min-width:0}
 .toast button{border:0;background:transparent;color:var(--on-btn);font-weight:800;text-decoration:underline;min-height:40px;padding:0 8px}
 .toast.plain{padding-right:18px}
+/* evidence */
+.ev-tag{display:inline-block;font-size:13px;font-weight:800;padding:2px 9px;border-radius:999px;margin:0 6px 4px 0;background:var(--card);color:var(--ink);border:1.5px solid currentColor}
+.ev-strong{background:var(--raise);color:var(--ok)}
+.ev-emerging{background:var(--warn-bg);color:var(--warn)}
+.ev-estimate{background:var(--raise);color:var(--ink-2)}
+.ev-pref{background:var(--raise);color:var(--prot)}
+.ev-ref{font-style:italic;white-space:nowrap}
+.ev-src{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:4px}
+.why-target>div>p:not(.muted){font-size:16px}
+.pm-line{font-size:15px;color:var(--ink-2);margin-top:-8px}
+/* nutrition phases */
+.pill-btn{border:0;color:var(--ink);display:inline-flex;align-items:center;gap:6px;min-height:36px;cursor:pointer}
+.phase-line{font-size:15px;font-weight:700;color:var(--ink-2);margin-top:4px}
+.phase-line.warn-t{color:var(--warn)}
+.ph-list{display:flex;flex-direction:column;gap:10px}
+.ph-opt{width:100%;text-align:left;border:1.5px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ph-opt.on{border:2.5px solid var(--btn);padding:13px 15px}
+.ph-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ph-top b{font-size:19px;font-weight:800}
+.ph-opt ul{margin:0;padding-left:18px;font-size:16px;display:flex;flex-direction:column;gap:2px}
+.ph-about{font-size:15px;color:var(--muted)}
+.ph-caution{font-size:15px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:10px;padding:8px 10px}
+.ph-prev{border:1px solid var(--line);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;background:var(--card)}
+.ph-k{font-size:32px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ph-m{font-size:17px;font-weight:600;color:var(--ink-2)}
+.nf-chk{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink-2);margin-top:8px;min-height:36px}
+.nf-chk input{width:22px;height:22px;accent-color:var(--btn)}
+.nf-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.nf-switch{width:56px;height:34px;border-radius:999px;border:0;background:var(--track);position:relative;flex:none;padding:0}
+.nf-switch i{position:absolute;top:3px;left:3px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s}
+.nf-switch.on{background:var(--ok)}.nf-switch.on i{left:25px}
+.cp-dl div{grid-template-columns:150px 1fr}
 /* creatine (inside the budget card, under fluids) */
 .cr{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px}
 .cr-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
@@ -1237,12 +1269,14 @@ function budgetHTML(f,R,t,day){
       +'<p style="font-size:17px">Set up your plan and the Food Tracker shows what you have left each day.</p><button type="button" class="btn-main" data-act="go-plan">Set up my plan</button>';
   } else {
     var rem=R.kcal-t.kcal,over=rem<-0.5;
-    h+='<div><p class="eyebrow">'+(over?'Over today':'Left today')+'</p><p class="big'+(over?' over':'')+'" id="b-kcal">'+fmtK(Math.abs(rem))+' kcal</p><p class="muted" style="margin-top:4px">'+fmtK(t.kcal)+' eaten of '+fmtN(R.kcal)+' kcal</p></div>';
+    h+='<div><p class="eyebrow">'+(over?'Over today':'Left today')+'</p><p class="big'+(over?' over':'')+'" id="b-kcal">'+fmtK(Math.abs(rem))+' kcal</p><p class="muted" style="margin-top:4px">'+fmtK(t.kcal)+' eaten of '+fmtN(R.kcal)+' kcal</p>'+(phaseLabel(R)?'<p class="phase-line" id="b-phase">'+esc(phaseLabel(R))+'</p>':'')+(R.phase&&R.phase.invalid?'<p class="phase-line warn-t">Plan needs adjusting · see Me</p>':'')+'</div>';
     h+=[["p","Protein",t.p,R.protein],["c","Carbohydrates",t.c,R.carbs],["f","Fat",t.f,R.fat]].map(function(m){
       if(m[3]==null)return "";var ov=m[2]>m[3]+0.5,pc=m[3]?Math.min(100,m[2]/m[3]*100):0;
       return '<div class="mrow" id="m-'+m[0]+'"><div class="mrow-top"><span class="n">'+m[1]+'</span><span class="v">'+fmtK(m[2])+' <span>/ '+fmtN(m[3])+' g</span></span></div><div class="bar '+m[0]+'"><i style="width:'+pc.toFixed(1)+'%"'+(ov?' class="over"':'')+'></i></div></div>';
     }).join('');
   }
+  if(R.kcal!=null)h+=proteinMealsHTML(day,R);
+  if(R.phase&&R.phase.ok&&R.phase.mode!=="maintain"){var rf=reviewFlags();if(rf.length)h+='<p class="phase-line warn-t">'+rf.length+' thing'+(rf.length===1?'':'s')+' to review · Me → My Cutting Progress</p>';}
   h+='<div class="fluids"><span>Fluids today</span><b id="b-fluid">'+fmtK(fl)+' ml</b></div>';
   h+=creatineHTML();
   if(t.missAny)h+='<p class="muted small" style="margin-top:-6px">Some items have no nutrition data, so real totals may be a little higher.</p>';
@@ -1270,8 +1304,9 @@ function logHTML(day){
   return h+'</section>';
 }
 function viewToday(){
-  var day=todayISO(),f=loadFuel(),R=calcFuel(f),t=dayTotals(day);
-  return '<header class="head"><span class="head-date">Today · '+esc(dateShort())+'</span>'+(R.kcal!=null?'<span class="pill">'+STRAT_PILL[f.strategy]+'</span>':'')+'</header>'
+  var day=todayISO(),f=loadFuel(),R=calcFuel(f),t=dayTotals(day);recordTarget(day,R);
+  var pillTxt=R.phase&&R.phase.ok?R.phase.name:(R.kcal!=null?STRAT_PILL[f.strategy]:"Nutrition phase");
+  return '<header class="head"><span class="head-date">Today · '+esc(dateShort())+'</span><button type="button" class="pill pill-btn" data-open-phase aria-label="My Nutrition Phase: '+esc(pillTxt)+'">'+esc(pillTxt)+'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></header>'
     +budgetHTML(f,R,t,day)
     +'<button type="button" class="btn-main" data-act="log">'+ICON.plus+'Log food or drink</button>'
     +againHTML()+logHTML(day)+completeTodayHTML(day)+biCardHTML();
@@ -1316,22 +1351,27 @@ function viewMe(){
   h+='<section class="stack" aria-label="Appearance"><p class="eyebrow">Appearance</p><div class="seg themes" role="radiogroup" aria-label="Appearance">'
     +THEMES.map(function(o){return '<button type="button" role="radio" aria-checked="'+(c===o[0])+'" class="'+(c===o[0]?'on':'')+'" data-theme-set="'+o[0]+'"><span class="sw" style="background:linear-gradient(135deg,'+o[2]+' 50%,'+o[3]+' 50%)" aria-hidden="true"></span>'+o[1]+'</button>';}).join('')+'</div><p class="muted small">Mint and Barbie match Body Fuel Lab. System follows your phone\'s light or dark setting.</p></section>';
   // plan
-  h+='<section class="card" id="plan" aria-label="My plan"><div class="head"><p class="eyebrow">Daily target</p>'+(R.kcal!=null?'<span class="pill">'+STRAT_PILL[f.strategy]+'</span>':'')+'</div>';
+  h+='<section class="card" id="plan" aria-label="My plan"><div class="head"><p class="eyebrow">Daily target</p>'+(R.phase&&R.phase.ok?'<button type="button" class="pill pill-btn" data-open-phase>'+esc(R.phase.name)+'</button>':R.kcal!=null?'<span class="pill">'+STRAT_PILL[f.strategy]+'</span>':'')+'</div>';
+  var PHON=!!(R.phase&&R.phase.ok);
   if(R.kcal!=null){
     h+='<p class="big" id="plan-kcal" style="margin-top:-10px">'+fmtN(R.kcal)+' kcal</p>';
     h+=[["p","Protein",R.protein,4],["c","Carbohydrates",R.carbs,4],["f","Fat",R.fat,9]].map(function(m){if(m[2]==null)return "";var pc=m[2]*m[3]/R.kcal*100;return '<div class="mrow" id="pm-'+m[0]+'"><div class="mrow-top"><span class="n">'+m[1]+'</span><span class="v">'+fmtN(m[2])+' g</span></div><div class="bar '+m[0]+'"><i style="width:'+Math.min(100,pc).toFixed(1)+'%"></i></div><p class="muted small">'+fmtK(m[2]*m[3])+' kcal · '+Math.round(pc)+'% of daily calories</p></div>';}).join('');
-    h+='<p class="muted small">'+(R.ownKcal?'Your own target. Recommended: '+(R.calcKcal!=null?fmtN(R.calcKcal)+' kcal':'not available')+'.':'Estimated from your measurements. Not medical advice.')+'</p>';
+    if(PHON)h+='<p class="muted small">'+esc(phaseLabel(R))+'. From '+fmtN(R.phase.maint)+' kcal maintenance ('+esc(R.phase.maintSrc)+'). Not medical advice.</p>';
+    else h+='<p class="muted small">'+(R.ownKcal?'Your own target. Recommended: '+(R.calcKcal!=null?fmtN(R.calcKcal)+' kcal':'not available')+'.':'Estimated from your measurements. Not medical advice.')+'</p>';
   } else if(f.strategy==="cut"&&R.cutBlocked){h+='<div class="note warn">'+esc(R.cutBlocked)+'</div>';}
   else h+='<p style="font-size:17px">Add your measurements below and the Food Tracker works out your calories and macros.</p>';
-  if(R.ok)h+='<div class="seg" role="group" aria-label="Goal">'+STRAT.map(function(s){var k=R.targets[s[0]];return '<button type="button" class="'+(f.strategy===s[0]?'on':'')+'" data-strat="'+s[0]+'" aria-pressed="'+(f.strategy===s[0])+'">'+s[1]+'<small>'+(k!=null?fmtN(k):'n/a')+'</small></button>';}).join('')+'</div>';
+  if(R.ok&&!PHON)h+='<div class="seg" role="group" aria-label="Goal">'+STRAT.map(function(s){var k=R.targets[s[0]];return '<button type="button" class="'+(f.strategy===s[0]?'on':'')+'" data-strat="'+s[0]+'" aria-pressed="'+(f.strategy===s[0])+'">'+s[1]+'<small>'+(k!=null?fmtN(k):'n/a')+'</small></button>';}).join('')+'</div>';
   R.warn.forEach(function(w){h+='<div class="note warn">'+esc(w)+'</div>';});
   h+='</section>';
   var open=ui().open||{};
   function fold(id,title,body,def){var o=id in open?open[id]:def;return '<details class="fold" data-fold="'+id+'"'+(o?' open':'')+'><summary><span>'+title+'</span></summary><div class="fold-b">'+body+'</div></details>';}
   h+=fold("me-meas","My measurements"+(f.measSaved?' <span class="muted small" style="font-weight:500">· '+esc(fmtDate(f.measSaved))+'</span>':''),measForm(f,R),!f.measSaved);
+  var NN=loadNutr();
+  h+=fold("me-nutr","My Nutrition Settings"+(NN.active?' <span class="muted small" style="font-weight:500">· '+esc(PH[NN.mode].name)+'</span>':' <span class="muted small" style="font-weight:500">· new</span>'),nutrSettingsHTML(),false);
+  h+=fold("me-cut","My Cutting Progress",cuttingHTML(),false);
   var o=overOf(f);
-  h+=fold("me-own","Own calorie target",'<p class="muted">Leave empty to use the recommended target'+(R.calcKcal!=null?' ('+fmtN(R.calcKcal)+' kcal)':'')+'. Saved separately for '+STRAT_LABEL[f.strategy]+'.</p><div class="grid2"><input class="inp" id="own-kcal" inputmode="numeric" placeholder="kcal" value="'+(o.kcal!=null?o.kcal:"")+'" aria-label="Own calorie target"><button type="button" class="btn-main" data-act="own-save" style="min-height:52px;font-size:17px">Save</button></div>',false);
-  h+=fold("me-why","How is this calculated?",whyHTML(f,R),false);
+  if(!PHON)h+=fold("me-own","Own calorie target",'<p class="muted">Leave empty to use the recommended target'+(R.calcKcal!=null?' ('+fmtN(R.calcKcal)+' kcal)':'')+'. Saved separately for '+STRAT_LABEL[f.strategy]+'.</p><div class="grid2"><input class="inp" id="own-kcal" inputmode="numeric" placeholder="kcal" value="'+(o.kcal!=null?o.kcal:"")+'" aria-label="Own calorie target"><button type="button" class="btn-main" data-act="own-save" style="min-height:52px;font-size:17px">Save</button></div>',false);
+  h+=fold("me-why",PHON?"How maintenance is estimated":"How is this calculated?",whyHTML(f,PHON?calcFuelBase(f):R),false);
   // food profile
   var cons=consList();
   h+=fold("me-profile","Food profile <span class=\"muted small\" style=\"font-weight:500\">· "+cons.filter(function(c){return c.status!=="noteval";}).length+" set</span>",
@@ -1779,14 +1819,14 @@ document.addEventListener("toggle",function(ev){var d=ev.target;if(d&&d.id==="mc
    Missing values are never treated as zero; nothing is ever added to the diary automatically. */
 K.daystatus="bflfood_daystatus";K.insights="bflfood_insights";
 var BI_ACTS=[["strength","Strength training"],["cardio","Walking / cardio"],["rest","Rest day"],["other","Other activity"]];
-var BI_SCALES=[["energy","Energy","1 very low · 5 great"],["hunger","Hunger","1 not hungry · 5 very hungry"],["recovery","Recovery","1 very sore or tired · 5 fully recovered"]];
+var BI_SCALES=[["energy","Energy","1 very low · 5 great"],["hunger","Hunger","1 not hungry · 5 very hungry"],["recovery","Recovery","1 very sore or tired · 5 fully recovered"],["performance","Training performance","1 much weaker · 5 strong"],["sleep","Sleep quality","1 very poor · 5 great"]];
 var BI_MIN_COMPLETE=3;
 var BI_WIN={with:"when you noted the food",early:"0–6 hours after eating",same:"later the same day",mid:"6–24 hours after eating",morning:"the following morning",late:"24–48 hours after eating"};
 var BI_WIN_ORDER=["with","early","same","mid","morning","late"];
 function dayAdd(iso,n){var d=parseISO(iso);d.setDate(d.getDate()+n);return isoOf(d);}
 function lastDays(n){var t=todayISO(),a=[];for(var i=n-1;i>=0;i--)a.push(dayAdd(t,-i));return a;}
 function dShort(iso){var d=parseISO(iso);return d?d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",",""):iso;}
-function fmt1(n){return n==null?"n/a":String(r1(n)).replace(".",",");}
+function fmt1(n){return n==null?"n/a":(Math.round(n*10)/10).toFixed(1).replace(".",",");}
 function hm(t){var d=new Date(t);return String(d.getHours()).padStart(2,"0")+"."+String(d.getMinutes()).padStart(2,"0");}
 function plural(n,w,ws){return n+" "+(n===1?w:(ws||w+"s"));}
 /* ----- day status ----- */
@@ -1795,9 +1835,10 @@ function isComplete(day){return !!((loadDiary()[day]||[]).length&&(dayStatusAll(
 function setComplete(day,v){var S=dayStatusAll();if(v)S[day]={complete:true,at:Date.now()};else delete S[day];DB.set(K.daystatus,S);}
 /* ----- daily context, reusing bflfood_progress ----- */
 function dayCtx(day){
-  var o={act:[],actNote:"",energy:null,hunger:null,recovery:null,sleep:null};
+  var o={act:[],actNote:"",energy:null,hunger:null,recovery:null,sleep:null,performance:null,dayType:null,cycleSym:[]};
   loadProg().filter(function(e){return e.date===day;}).sort(function(a,b){return (a.ctx?1:0)-(b.ctx?1:0);}).forEach(function(e){
-    ["energy","hunger","recovery","sleep"].forEach(function(k){if(e[k]!=null&&e[k]!=="")o[k]=+e[k];});
+    if(e.ctx&&e.dayType)o.dayType=e.dayType;if(e.ctx&&Array.isArray(e.cycleSym))o.cycleSym=e.cycleSym.slice();
+    ["energy","hunger","recovery","sleep","performance"].forEach(function(k){if(e[k]!=null&&e[k]!=="")o[k]=+e[k];});
     if(Array.isArray(e.act)&&e.ctx)o.act=e.act.slice();if(e.ctx&&e.actNote!=null)o.actNote=e.actNote;});
   return o;
 }
@@ -1826,8 +1867,11 @@ function biConsistency(n){
   var CR=creatineAll();o.creatine={any:Object.keys(CR).length>0,taken:days.filter(function(d){return CR[d.day];}).map(function(d){return d.day;})};
   o.withMissing=comp.filter(function(d){return d.miss.kcal||d.miss.p||d.miss.c||d.miss.f;});
   o.fibReliable=comp.length>0&&comp.every(function(d){return !d.miss.fib;});
-  if(R.protein!=null)o.protHit=comp.filter(function(d){return d.t.p>=R.protein;});
-  if(R.kcal!=null){o.above=comp.filter(function(d){return d.t.kcal>R.kcal*1.05;});o.below=comp.filter(function(d){return d.t.kcal<R.kcal*0.95;});o.near=comp.filter(function(d){return d.t.kcal>=R.kcal*0.95&&d.t.kcal<=R.kcal*1.05;});}
+  /* each day is compared with the target saved for that day; days from before targets were saved use today's target */
+  var tP=function(d){var h=targetFor(d.day);return h&&h.p!=null?h.p:R.protein;},tK=function(d){var h=targetFor(d.day);return h&&h.kcal!=null?h.kcal:R.kcal;};
+  o.varies=comp.some(function(d){var h=targetFor(d.day);return h&&(h.kcal!==R.kcal||h.p!==R.protein);});
+  if(R.protein!=null)o.protHit=comp.filter(function(d){return d.t.p>=tP(d);});
+  if(R.kcal!=null){o.above=comp.filter(function(d){return d.t.kcal>tK(d)*1.05;});o.below=comp.filter(function(d){return d.t.kcal<tK(d)*0.95;});o.near=comp.filter(function(d){var k=tK(d);return d.t.kcal>=k*0.95&&d.t.kcal<=k*1.05;});}
   /* lowest-protein main meal on complete days with ≥2 of breakfast/lunch/dinner logged (and their protein known) */
   var low={},eligible=0,lowDays={};
   comp.forEach(function(d){var m=["Breakfast","Lunch","Dinner"].filter(function(s){return d.slots[s]&&!d.slots[s].miss;});if(m.length<2)return;eligible++;
@@ -2002,7 +2046,7 @@ function biSecConsistency(){
     var obs=[];
     if(c.protHit)obs.push('Your protein target was reached on <b>'+c.protHit.length+' of '+c.complete.length+'</b> completed days.');
     obs.push('Your average logged protein intake was <b>'+Math.round(c.avg.p)+' g</b>.');
-    if(c.above)obs.push('Calories: <b>'+c.above.length+'</b> above, <b>'+c.near.length+'</b> within 5% of and <b>'+c.below.length+'</b> below your target of '+fmtN(R.kcal)+' kcal.');
+    if(c.above)obs.push('Calories: <b>'+c.above.length+'</b> above, <b>'+c.near.length+'</b> within 5% of and <b>'+c.below.length+'</b> below '+(c.varies?'each day\'s target':'your target of '+fmtN(R.kcal)+' kcal')+'.');
     if(c.lowMeal)obs.push('Your lowest-protein main meal is often <b>'+c.lowMeal.slot.toLowerCase()+'</b> ('+c.lowMeal.k+' of '+c.lowMeal.of+' complete days with at least two main meals).');
     h+='<ul class="sg-pat">'+obs.map(function(o){return '<li>'+o+'</li>';}).join('')+'</ul>';
     if(c.withMissing.length)h+='<p class="muted small">'+plural(c.withMissing.length,"complete day")+' include'+(c.withMissing.length===1?'s':'')+' foods with unknown values. Those values aren\'t counted, so real intake may be a little higher.</p>';
@@ -2034,6 +2078,7 @@ function biSecFuel(){
     +'<div class="chips">'+BI_ACTS.map(function(a){var on=c.act.indexOf(a[0])>=0;return '<button type="button" class="chip'+(on?' on':'')+'" data-bi-act="'+a[0]+'" aria-pressed="'+on+'">'+a[1]+'</button>';}).join('')+'</div>'
     +'<input class="inp" id="bi-actnote" value="'+esc(c.actNote||"")+'" placeholder="Note (optional), e.g. legs, 45 min" aria-label="Activity note" autocomplete="off">'
     +BI_SCALES.map(function(s){return '<div><p class="lbl" style="margin-bottom:6px">'+s[1]+' <span class="muted small" style="font-weight:500">'+s[2]+'</span></p><div class="seg">'+[1,2,3,4,5].map(function(v){var on=c[s[0]]===v;return '<button type="button" class="'+(on?'on':'')+'" data-bi-scale="'+s[0]+'" data-v="'+v+'" aria-pressed="'+on+'">'+v+'</button>';}).join('')+'</div></div>';}).join('')
+    +'<div><p class="lbl" style="margin-bottom:6px">Cycle or menopause symptoms <span class="muted small" style="font-weight:500">optional</span></p><div class="chips">'+CYCLE_SYMS.map(function(x){var on=c.cycleSym.indexOf(x)>=0;return '<button type="button" class="chip'+(on?' on':'')+'" data-bi-csym="'+esc(x)+'" aria-pressed="'+on+'">'+esc(x)+'</button>';}).join('')+'</div></div>'
     +'<p class="muted small">Optional. Saved as you tap, alongside your weight check-ins.</p></div>';
   if(Fu.obs.length)h+=Fu.obs.map(function(o){return '<div class="bi-obs"><p>'+esc(o.text)+'</p>'+(o.recs.length?whyHTML2(o):'<p class="muted small">'+esc(o.limits)+'</p>')+'</div>';}).join('');
   else h+='<p class="muted">Observations appear after a few days with activity, check-ins and complete food logs.</p>';
@@ -2079,11 +2124,295 @@ document.addEventListener("click",function(ev){
   if(t.hasAttribute("data-bi-uncomplete")){setComplete(t.getAttribute("data-bi-uncomplete"),false);render();return;}
   if(t.hasAttribute("data-bictx")){APP.bictx=t.getAttribute("data-bictx");render();return;}
   if(t.hasAttribute("data-bi-act")){var day=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO(),a=dayCtx(day).act,v=t.getAttribute("data-bi-act"),i=a.indexOf(v);if(i>=0)a.splice(i,1);else{a.push(v);if(v==="rest")a=a.filter(function(x){return x!=="strength"&&x!=="cardio";});else if(v==="strength"||v==="cardio")a=a.filter(function(x){return x!=="rest";});}setDayCtx(day,{act:a});render();return;}
+  if(t.hasAttribute("data-bi-csym")){var dyc=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO(),cs=dayCtx(dyc).cycleSym,cv=t.getAttribute("data-bi-csym"),ci=cs.indexOf(cv);if(ci>=0)cs.splice(ci,1);else cs.push(cv);setDayCtx(dyc,{cycleSym:cs});render();return;}
   if(t.hasAttribute("data-bi-scale")){var day2=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO(),k=t.getAttribute("data-bi-scale"),val=+t.getAttribute("data-v"),p={};p[k]=dayCtx(day2)[k]===val?null:val;setDayCtx(day2,p);render();return;}
   if(t.hasAttribute("data-bi-add")){var s=(APP.biSug||[])[+t.getAttribute("data-bi-add")];if(s){var f=clone(s.food);f.presets=f.presets||[];APP.sheet=null;openPortion(f,s.qty);}return;}
   if(t.hasAttribute("data-bi-all")){openSheet({view:"insights"});return;}
 });
 document.addEventListener("change",function(ev){var t=ev.target;if(t.id==="bi-actnote"){var day=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO();setDayCtx(day,{actNote:t.value.trim()});}});
+
+/* ============================== EVIDENCE BASE (female sports nutrition) ============================== */
+/* A fixed, dated list. The app does NOT update research automatically: these were read and summarised on the review date.
+   Levels used in the app: "strong" = consistent findings across reviews/position stands; "emerging" = limited, mixed or
+   population-limited evidence; plus "estimate" (an individual estimate for you) and "preference" (your choice). */
+var EVIDENCE_REVIEWED="2026-10-18";
+var EVIDENCE=[
+  {id:"issn2023",title:"International Society of Sports Nutrition position stand: nutritional concerns of the female athlete",authors:"Sims ST, Kerksick CM, Smith-Ryan AE, et al.",journal:"Journal of the International Society of Sports Nutrition 20(1)",year:2023,doi:"10.1080/15502783.2023.2204066",type:"Position stand (expert review)",level:"Position stand",
+    points:["Adequate energy intake and energy availability are the primary nutritional priority.","Daily protein in the mid-to-upper sports range (1,4–2,2 g/kg), spread every 3–4 hours; peri- and post-menopausal women towards the upper end.","Meet carbohydrate needs first; the position stand also suggests tailoring to hormonal status (an area with limited evidence).","Creatine 3–5 g/day has some of the best evidence in women."]},
+  {id:"larrosa2024",title:"Nutritional strategies for optimizing health, sports performance, and recovery for female athletes and other physically active women: a systematic review",authors:"Larrosa M, Gil-Izquierdo A, González-Rodríguez LG, et al.",journal:"Nutrition Reviews",year:2024,doi:"10.1093/nutrit/nuae082",type:"Systematic review",level:"Systematic review (studies with moderate risk of bias)",
+    points:["Higher-carbohydrate diets improve performance in activities that deplete muscle glycogen.","5–6 protein-containing meals across the day, each above 25 g, favour muscle protein building.","Many included studies didn't describe how menstrual-cycle phase was controlled."]},
+  {id:"moore2022",title:"Fuelling the female athlete: carbohydrate and protein recommendations",authors:"Moore DR, Sygo J, Morton JP",journal:"European Journal of Sport Science 22(5)",year:2022,doi:"10.1080/17461391.2021.1922508",type:"Narrative review",level:"Narrative review",
+    points:["No sex-specific carbohydrate or protein guidelines are needed, provided energy needs are met.","No consensus that menstrual-cycle phase changes these recommendations; consider personal cycle symptoms instead."]},
+  {id:"cabre2025",title:"Optimizing performance and health: nutrition considerations for female athletes in strength and conditioning",authors:"Cabre HE",journal:"Strength and Conditioning Journal 47(6):619–629",year:2025,doi:"10.1519/SSC.0000000000000914",type:"Narrative review",level:"Narrative review (premenopausal athletes)",
+    points:["Protein at least 1,5 g/kg/day within a 1,4–2,0 g/kg range; 0,32–0,38 g/kg around resistance training.","Carbohydrate 3–7 g/kg/day depending on training volume and intensity.","Phase-based protein strategies aren't supported; “cycle syncing” claims are oversimplified.","Covers premenopausal women, not perimenopause."]}];
+var EV_LEVELS={strong:["Strong research evidence","ev-strong"],emerging:["Limited or emerging evidence","ev-emerging"],estimate:["Individual estimate","ev-estimate"],preference:["Your preference","ev-pref"]};
+function evTag(k){var l=EV_LEVELS[k];return '<span class="ev-tag '+l[1]+'">'+l[0]+'</span>';}
+function evRef(id){var e=EVIDENCE.filter(function(x){return x.id===id;})[0];return e?'<span class="ev-ref">'+esc(e.authors.split(",")[0])+' '+e.year+'</span>':"";}
+function evidenceListHTML(){
+  return '<p class="muted small">Sources the calculations are based on, last reviewed <b>'+esc(fmtDate(EVIDENCE_REVIEWED))+'</b>. The app doesn\'t update research automatically; a newer review would need an app update.</p>'
+    +EVIDENCE.map(function(e){return '<div class="ev-src"><p><b>'+esc(e.title)+'</b></p><p class="muted small">'+esc(e.authors)+' · '+esc(e.journal)+' · '+e.year+' · '+esc(e.type)+' · doi:'+esc(e.doi)+'</p><p class="small"><b>Evidence level:</b> '+esc(e.level)+'</p><ul class="bi-recs">'+e.points.map(function(p){return '<li>'+esc(p)+'</li>';}).join('')+'</ul></div>';}).join('');
+}
+/* ----- "Why is this my target?" ----- */
+function whyTargetHTML(T,N,R){
+  if(!T||!T.ok)return "";
+  var w=N.weight,cpk=w?T.baseC/w:null,ppkOut=N.ppk<1.8||N.ppk>2.2,st=N.female&&N.female.status;
+  var h='<details class="bi-why why-target"><summary>Why is this my target?</summary><div>';
+  h+='<p><b>Calories · '+fmtN(T.baseKcal)+' kcal</b></p><p>Your estimated maintenance ('+fmtN(T.maint)+' kcal) minus the '+(T.d?fmtN(T.d)+'% deficit of '+esc(T.name):'0% of '+esc(T.name))+'. It isn\'t a general allowance for women; it starts from your own maintenance estimate.</p><p>'+evTag("estimate")+evTag("preference")+'</p>'
+    +'<p class="muted small">Maintenance is '+esc(T.maintSrc)+'. It becomes more reliable as your weight trend and food logs build up. Getting enough energy is the first priority in women\'s sports nutrition '+evRef("issn2023")+'.</p>';
+  h+='<p><b>Protein · '+T.p+' g ('+gkg(N.ppk)+' g/kg)</b></p><p>Based on your body weight, strength training and the goal of keeping muscle while losing fat. Your setting sits '+(ppkOut?'<b>outside</b>':'inside')+' the 1,8–2,2 g/kg range used for this profile.</p><p>'+evTag("strong")+evTag("preference")+'</p>'
+    +'<p class="muted small">Strong evidence: 1,4–2,2 g/kg/day for active women '+evRef("issn2023")+'; at least 1,5 g/kg '+evRef("cabre2025")+'. Choosing '+gkg(N.ppk)+' within that range is your preference.'+(st==="peri"||st==="post"?' For peri- and post-menopausal women, the position stand suggests the upper end; the evidence here is still emerging.':'')+' More protein alone doesn\'t build muscle; strength training does that work.</p>';
+  h+='<p><b>Fat · '+T.f+' g ('+gkg(N.fpk)+' g/kg)</b></p><p>A minimum to cover essential fats and help absorb vitamins A, D, E and K. It stays fixed when the deficit or carbs change.</p><p>'+evTag("estimate")+'</p>'+(T.f*9<T.baseKcal*0.2?'<p class="note warn">Fat is below about 20% of your calories.</p>':'');
+  h+='<p><b>Carbohydrates · '+T.baseC+' g'+(cpk!=null?' ('+fmtN(r1(cpk))+' g/kg)':'')+'</b></p><p>What\'s left after protein and fat. Carbohydrates fuel hard and longer training and aren\'t treated as harmful.</p><p>'+evTag("strong")+evTag("estimate")+'</p>'
+    +'<p class="muted small">Higher carbohydrate improves performance in glycogen-depleting training '+evRef("larrosa2024")+'. A suggested range is 3–7 g/kg/day depending on training volume and intensity '+evRef("cabre2025")+'.'+(cpk!=null&&cpk<3?' <b>Yours is below that range</b>, which may limit hard or long sessions. Consider a gentler phase or carb cycling.':'')+'</p>';
+  if(T.cycling)h+='<p><b>Carb cycling</b></p><p>Training days '+T.week.cT+' g, rest days '+T.week.cR+' g. The weekly total stays the same.</p><p>'+evTag("preference")+'</p>';
+  h+='<p><b>Menstrual cycle and perimenopause</b></p><p>Targets are <b>not</b> changed automatically by cycle phase or perimenopause. The research is limited and mixed: one review found no support for phase-based protein, and another found no consensus on phase-based recommendations.</p><p>'+evTag("emerging")+'</p><p class="muted small">'+evRef("cabre2025")+' '+evRef("moore2022")+' '+evRef("issn2023")+'</p>';
+  h+='<p class="muted small">These are estimates to start from, not proven requirements for you. Your weight trend, energy, recovery and training will show how well they fit.</p></div></details>';
+  return h;
+}
+/* ----- protein across the day ----- */
+function proteinMealsHTML(day,R){
+  var N=loadNutr();if(!N.showMeals||R.protein==null)return "";var n=N.proteinMeals||4,per=Math.round(R.protein/n),D=loadDiary()[day]||[],by={};
+  D.forEach(function(e){var x=entryTotals(e);by[e.slot]=(by[e.slot]||0)+x.p;});
+  return '<p class="pm-line">Protein per meal ≈ <b>'+per+' g</b> ('+n+' meals)'+(Object.keys(by).length?' · '+SLOTS.filter(function(s){return by[s]!=null;}).map(function(s){return s+' '+Math.round(by[s]);}).join(' · '):'')+'</p>';
+}
+/* ----- flags for review (never automatic changes) ----- */
+function reviewFlags(){
+  var d7=lastDays(7),d14=lastDays(14).slice(0,7),F=[];
+  var vals=function(k,days){return days.map(function(d){return dayCtx(d)[k];}).filter(function(x){return x!=null;});};
+  var e=vals("energy",d7);if(e.length>=3&&e.filter(function(x){return x<=2;}).length>=3)F.push({k:"energy",t:"Low energy (1–2) on "+e.filter(function(x){return x<=2;}).length+" of "+e.length+" rated days this week."});
+  var hu=vals("hunger",d7);if(hu.length>=3&&hu.filter(function(x){return x>=4;}).length>=3)F.push({k:"hunger",t:"High hunger (4–5) on "+hu.filter(function(x){return x>=4;}).length+" of "+hu.length+" rated days this week."});
+  ["recovery","performance"].forEach(function(k){var a=vals(k,d7),b=vals(k,d14);if(a.length>=2&&b.length>=2){var ma=a.reduce(function(x,y){return x+y;},0)/a.length,mb=b.reduce(function(x,y){return x+y;},0)/b.length;if(ma<=mb-0.5)F.push({k:k,t:(k==="recovery"?"Recovery":"Training performance")+" is lower than last week ("+fmt1(ma)+" vs "+fmt1(mb)+")."});}});
+  return F;
+}
+/* ----- individual patterns: symptom days vs energy (counts only) ----- */
+function femalePatternsHTML(){
+  var days=lastDays(30),withS=[],without=[];
+  days.forEach(function(d){var c=dayCtx(d);if(c.energy==null)return;((c.cycleSym||[]).length?withS:without).push(c.energy);});
+  var L=[];
+  if(withS.length>=2&&without.length>=2){var a=withS.reduce(function(x,y){return x+y;},0)/withS.length,b=without.reduce(function(x,y){return x+y;},0)/without.length;
+    L.push("On "+withS.length+" days with cycle or menopause symptoms noted, energy averaged "+fmt1(a)+", against "+fmt1(b)+" on "+without.length+" other days.");}
+  var gs=[],ps=[];days.forEach(function(d){var s=daySleep(d),c=dayCtx(d);if(s&&c.performance!=null)(s==="poor"?ps:s==="good"?gs:[]).push(c.performance);});
+  if(gs.length>=2&&ps.length>=2)L.push("Training performance averaged "+fmt1(gs.reduce(function(x,y){return x+y;},0)/gs.length)+" after good sleep and "+fmt1(ps.reduce(function(x,y){return x+y;},0)/ps.length)+" after poor sleep.");
+  if(!L.length)return "";
+  return '<p class="lbl" style="margin-top:6px">Your individual patterns · last 30 days</p><ul class="sg-pat">'+L.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul><p class="muted small">Counts from your own check-ins. They don\'t diagnose a hormonal condition or prove a nutrient shortfall.</p>';
+}
+var FEMALE_STATUS=[["","Not set"],["regular","Regular cycles"],["irregular","Irregular cycles"],["peri","Perimenopause"],["post","Postmenopause"],["none","Not relevant / prefer not to say"]];
+var HRT_OPTS=[["","Not set"],["no","No"],["yes","Yes"],["private","Prefer not to say"]];
+var CYCLE_SYMS=["Cramps","Hot flushes","Night sweats","Breast tenderness","Mood changes","Bloating","Headache","Heavy bleeding","Spotting"];
+
+/* ============================== NUTRITION PHASES ============================== */
+/* bflfood_nutrition_v1: your phase settings. New targets only apply after you choose "Use these targets";
+   until then the previous targets keep working exactly as before. "Return to previous targets" switches back.
+   bflfood_targets_v1: the target that was in use on each day, saved from the day this version started.
+   Older days have no saved target and are never given an invented one.
+   Target = maintenance × (1 − deficit). Protein = weight × g/kg. Fat = weight × g/kg. Carbs = what's left ÷ 4. */
+K.nutr="bflfood_nutrition_v1";K.targets="bflfood_targets_v1";
+var PHASES=[
+  {id:"gentle",name:"Gentle Cut",range:[5,10],def:7.5,pts:["Estimated 5–10% calorie deficit.","Prioritises energy, recovery and gradual fat loss."],about:"A small deficit. Slower fat loss, usually easier on energy, training and hunger."},
+  {id:"standard",name:"Standard Cut",range:[10,15],def:12.5,pts:["Estimated 10–15% calorie deficit.","Prioritises fat loss while maintaining strength and muscle.","Recommended starting mode when appropriate."],about:"A moderate deficit that many people can sustain alongside strength training."},
+  {id:"advanced",name:"Advanced Cut",range:[15,20],def:17.5,pts:["Estimated 15–20% calorie deficit.","Requires closer monitoring of energy, sleep, hunger and performance."],about:"A larger deficit. Faster, but harder to recover from and more likely to cost energy or strength.",caution:"This isn't automatically appropriate. Use it for shorter periods and watch energy, sleep, hunger and performance closely."},
+  {id:"maintain",name:"Maintenance / Recovery",range:[0,0],def:0,pts:["No planned calorie deficit.","For recovery periods, illness, training breaks and maintenance."],about:"Eat at your estimated maintenance to recover, rest or hold your weight."}];
+var PH={};PHASES.forEach(function(p){PH[p.id]=p;});
+var WEEKDAYS=[[1,"Mon"],[2,"Tue"],[3,"Wed"],[4,"Thu"],[5,"Fri"],[6,"Sat"],[0,"Sun"]];
+function gkg(v){return (Math.round(v*100)/100).toFixed(Math.round(v*100)%10?2:1).replace(".",",");}
+function nutrDefaults(){return {v:2,active:false,mode:"standard",deficit:{gentle:7.5,standard:12.5,advanced:17.5},maint:null,maintProvisional:true,weight:68.5,goal:null,ppk:2.0,fpk:0.8,proteinMeals:4,showMeals:false,session:{min:null,intensity:null},female:{status:"",hrt:""},trainDays:[],cycling:false,cyclePct:20,over:{kcal:null,p:null,c:null,f:null},previous:null,created:todayISO()};}
+function loadNutr(){
+  var N=DB.get(K.nutr,null),fresh=!N;
+  N=Object.assign(nutrDefaults(),N||{});N.deficit=Object.assign(nutrDefaults().deficit,N.deficit||{});N.over=Object.assign({kcal:null,p:null,c:null,f:null},N.over||{});
+  if(!PH[N.mode])N.mode="standard";if(!Array.isArray(N.trainDays))N.trainDays=[];
+  N.session=Object.assign({min:null,intensity:null},N.session||{});N.female=Object.assign({status:"",hrt:""},N.female||{});
+  /* v1 → v2: protein default 1,9 → 2,0 g/kg. Only applied if the targets aren't in use yet; otherwise offered for you to accept. */
+  if(!fresh&&(N.v||1)<2){if(N.ppk===1.9){if(N.active)N.ppkSuggest=2.0;else N.ppk=2.0;}N.v=2;DB.set(K.nutr,N);}
+  if(fresh){var R=calcFuelBase(loadFuel());N.previous={kcal:R.kcal,p:R.protein,c:R.carbs,f:R.fat,label:STRAT_PILL[loadFuel().strategy]||"",date:todayISO()};DB.set(K.nutr,N);}
+  return N;
+}
+function saveNutr(N){DB.set(K.nutr,N);}
+function dayTypeOf(day,N){
+  var c=dayCtx(day);if(c.dayType==="training"||c.dayType==="rest")return {t:c.dayType,src:"set"};
+  if(c.act.indexOf("strength")>=0||c.act.indexOf("cardio")>=0)return {t:"training",src:"activity"};if(c.act.indexOf("rest")>=0)return {t:"rest",src:"activity"};
+  var wd=parseISO(day).getDay();return {t:(N||loadNutr()).trainDays.indexOf(wd)>=0?"training":"rest",src:"schedule"};
+}
+/* the calculator: pure, so the phase picker can preview any mode */
+function phaseTargets(N,R,mode,day){
+  mode=mode||N.mode;var ph=PH[mode],T={mode:mode,name:ph.name,warn:[],ok:false};
+  var maint=N.maint!=null?N.maint:(R&&R.ok?Math.round(R.maint):null);T.maint=maint;T.maintSrc=N.maint!=null?(N.maintProvisional?"yours, provisional":"yours"):(maint!=null?"calculated from your measurements, provisional":null);
+  if(maint==null){T.need="Enter your estimated maintenance calories in Me → My Nutrition Settings.";return T;}
+  var d=mode==="maintain"?0:(N.deficit[mode]!=null?N.deficit[mode]:ph.def);T.d=d;
+  var kcal=N.over.kcal!=null?N.over.kcal:round10(maint*(1-d/100)),w=N.weight;
+  var p=N.over.p!=null?N.over.p:Math.round(w*N.ppk),f=N.over.f!=null?N.over.f:Math.round(w*N.fpk);
+  var room=kcal-4*p-9*f,c;
+  if(N.over.c!=null)c=N.over.c;else c=Math.max(0,Math.round(room/4));
+  T.ok=true;T.baseKcal=kcal;T.p=p;T.f=f;T.baseC=c;
+  if(room<0&&N.over.c==null){T.invalid=true;T.warn.push("Your calorie target ("+fmtN(kcal)+" kcal) can't fit "+p+" g protein and "+f+" g fat, which need "+fmtN(4*p+9*f)+" kcal. Please adjust the plan: choose a smaller deficit, check your maintenance estimate or lower the g/kg settings. Protein and fat haven't been reduced for you.");}
+  var mk=4*p+4*c+9*f;if(Math.abs(mk-kcal)>30)T.warn.push("Your macros add up to "+fmtN(mk)+" kcal, which differs from the "+fmtN(kcal)+" kcal target. Check your manual overrides.");
+  if(R&&R.ok&&R.floor&&kcal<R.floor)T.warn.push("This is below a safe minimum for you (about "+fmtN(round10(R.floor))+" kcal). A smaller deficit is safer.");
+  if(ph.caution)T.warn.push(ph.caution);
+  /* carb cycling: same weekly calories; protein and fat never change */
+  var tr=N.trainDays.length,rs=7-tr;T.week={t:tr,r:rs};
+  var dt=dayTypeOf(day||todayISO(),N);T.dayType=dt.t;T.dayTypeSrc=dt.src;
+  if(N.cycling&&tr>0&&rs>0&&N.over.c==null&&c>0){
+    var pct=N.cyclePct/100,cR=Math.round(c*(1-pct)),cT=Math.round(c+c*pct*rs/tr);
+    T.week.cT=cT;T.week.cR=cR;T.week.kT=kcal+4*(cT-c);T.week.kR=kcal+4*(cR-c);T.cycling=true;
+    T.c=dt.t==="training"?cT:cR;T.kcal=dt.t==="training"?T.week.kT:T.week.kR;
+  } else {T.c=c;T.kcal=kcal;if(N.cycling)T.cycleOff=tr===0||rs===0?"Carb cycling needs both training and rest days in your week.":N.over.c!=null?"Carb cycling is paused while you have a manual carbohydrate target.":"";}
+  return T;
+}
+/* targets everywhere in the app come through calcFuel, so the overview, Me and My Body Intelligence all agree */
+var calcFuelBase=calcFuel;
+calcFuel=function(f,day){
+  var R=calcFuelBase(f),N=loadNutr();if(!N.active)return R;
+  var T=phaseTargets(N,R,N.mode,day);R.phase=T;if(!T.ok)return R;
+  R.base={kcal:R.kcal,protein:R.protein,carbs:R.carbs,fat:R.fat};R.kcal=T.kcal;R.protein=T.p;R.carbs=T.c;R.fat=T.f;R.ownKcal=false;R.warn=T.warn.slice();
+  return R;
+};
+function phaseLabel(R){if(R.phase&&R.phase.ok)return R.phase.name+" · "+(R.phase.dayType==="training"?"Training Day":"Rest Day");return null;}
+function recordTarget(day,R){
+  if(R.kcal==null)return;var H=DB.get(K.targets,{})||{},o={kcal:R.kcal,p:R.protein,c:R.carbs,f:R.fat,label:R.phase&&R.phase.ok?phaseLabel(R):(STRAT_PILL[loadFuel().strategy]||"")};
+  var cur=H[day];if(cur&&cur.kcal===o.kcal&&cur.p===o.p&&cur.c===o.c&&cur.f===o.f&&cur.label===o.label)return;o.at=Date.now();H[day]=o;DB.set(K.targets,H);
+}
+function targetFor(day){var H=DB.get(K.targets,{})||{};return H[day]||null;}
+/* ----- phase picker (from the pill on Today) ----- */
+function phaseSheetHTML(s){
+  var N=loadNutr(),R=calcFuelBase(loadFuel()),sel=s.pick||N.mode,T=phaseTargets(N,R,sel,todayISO()),dt=T.dayType||dayTypeOf(todayISO(),N).t;
+  var h='<p class="muted">Choose a phase. Targets are estimates. Your logs and earlier days stay as they are.</p><div class="ph-list" role="radiogroup" aria-label="Nutrition phase">'
+    +PHASES.map(function(p){var on=sel===p.id,d=p.id==="maintain"?0:N.deficit[p.id];return '<button type="button" role="radio" aria-checked="'+on+'" class="ph-opt'+(on?' on':'')+'" data-ph="'+p.id+'"><span class="ph-top"><b>'+p.name+'</b>'+(N.active&&N.mode===p.id?'<span class="sg-tag in">Active</span>':'')+'</span><ul>'+p.pts.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul><span class="ph-about">'+esc(p.about)+(p.id!=="maintain"?' Set to '+fmtN(d)+'%.':'')+'</span>'+(p.caution?'<span class="ph-caution">⚠ '+esc(p.caution)+'</span>':'')+'</button>';}).join('')+'</div>';
+  h+='<div><p class="lbl">Today is a</p><div class="seg" role="group"><button type="button" class="'+(dt==="training"?'on':'')+'" data-daytype="training" aria-pressed="'+(dt==="training")+'">Training Day</button><button type="button" class="'+(dt==="rest"?'on':'')+'" data-daytype="rest" aria-pressed="'+(dt==="rest")+'">Rest Day</button></div></div>';
+  if(!T.ok){h+='<div class="note warn">'+esc(T.need)+'</div><div class="grid2"><input class="inp" id="ph-maint" inputmode="numeric" placeholder="kcal" aria-label="Estimated maintenance calories"><button type="button" class="btn-main" data-ph-maint style="min-height:52px;font-size:17px">Save</button></div><p class="muted small">Saved as provisional. Your current target isn\'t assumed to be your maintenance.</p>';return h;}
+  h+='<div class="ph-prev"><p class="lbl">'+esc(T.name)+' · '+(dt==="training"?'Training Day':'Rest Day')+'</p><p class="ph-k">'+fmtN(T.kcal)+' kcal</p><p class="ph-m">Protein '+T.p+' g · Carbs '+T.c+' g · Fat '+T.f+' g</p><p class="muted small">From '+fmtN(T.maint)+' kcal maintenance ('+esc(T.maintSrc)+')'+(T.d?' − '+fmtN(T.d)+'%':'')+(T.cycling?'. Carb cycling on':'')+'.</p></div>';
+  T.warn.forEach(function(w){h+='<div class="note warn">'+esc(w)+'</div>';});
+  h+=whyTargetHTML(T,N,R);
+  if(!N.active)h+='<button type="button" class="btn-main" data-ph-use'+(T.invalid?' disabled':'')+'>Use these targets</button><p class="muted small">Until you tap this, your current targets'+(N.previous&&N.previous.kcal!=null?' ('+fmtN(N.previous.kcal)+' kcal)':'')+' stay in use.</p>';
+  else if(sel!==N.mode)h+='<button type="button" class="btn-main" data-ph-use'+(T.invalid?' disabled':'')+'>Switch to '+esc(T.name)+'</button>';
+  if(N.active)h+='<button type="button" class="linkbtn" data-ph-prev style="align-self:flex-start">Return to previous targets'+(N.previous&&N.previous.kcal!=null?' ('+fmtN(N.previous.kcal)+' kcal)':'')+'</button>';
+  h+='<button type="button" class="linkbtn" data-ph-settings style="align-self:flex-start">My Nutrition Settings</button>';
+  return h;
+}
+/* ----- Me: settings ----- */
+function nfInp(id,label,val,ph,mode,hint){return '<div><label class="lbl" for="nf-'+id+'">'+label+'</label><input class="inp" id="nf-'+id+'" data-nf="'+id+'" inputmode="'+(mode||"decimal")+'" value="'+(val!=null?esc(fmtN(val)):"")+'" placeholder="'+esc(ph||"")+'">'+(hint?'<p class="muted small" style="margin-top:4px">'+hint+'</p>':'')+'</div>';}
+function nutrSettingsHTML(){
+  var N=loadNutr(),R=calcFuelBase(loadFuel()),T=phaseTargets(N,R,N.mode,todayISO()),p=PH[N.mode];
+  var h='<p class="muted">Saved as you change them. New targets apply '+(N.active?'from today. Earlier days keep their logs and the targets they had.':'once you choose “Use these targets”.')+'</p>';
+  h+='<div class="grid2">'+nfInp("weight","Current weight (kg)",N.weight,"68,5")+nfInp("goal","Goal weight (kg)",N.goal,"optional")+'</div>';
+  h+=nfInp("maint","Estimated maintenance (kcal)",N.maint,R.ok?"calculated: "+fmtN(round10(R.maint)):"e.g. 2100","numeric",N.maint!=null?'<label class="nf-chk"><input type="checkbox" data-nf-prov'+(N.maintProvisional?' checked':'')+'> Provisional, until enough tracking data exists</label>':(R.ok?'Empty = the app\'s calculated estimate ('+fmtN(round10(R.maint))+' kcal), treated as provisional.':'Needed for phase targets. Your current target isn\'t assumed to be your maintenance.'));
+  h+='<div><div class="grid2">'+nfInp("ppk","Protein (g per kg)",N.ppk,"2,0")+nfInp("fpk","Minimum fat (g per kg)",N.fpk,"0,8")+'</div>'
+    +'<div class="chips" style="margin-top:8px" role="group" aria-label="Protein g per kg">'+[1.8,2.0,2.2].map(function(v){var on=Math.abs(N.ppk-v)<0.001;return '<button type="button" class="chip'+(on?' on':'')+'" data-nf-ppk="'+v+'" aria-pressed="'+on+'">'+gkg(v)+' g/kg · '+Math.round(N.weight*v)+' g</button>';}).join('')+'</div>'
+    +'<p class="muted small" style="margin-top:6px">'+(N.ppk<1.8||N.ppk>2.2?'<b>Outside the 1,8–2,2 g/kg range</b> used for strength training during fat loss. ':'Range for strength training during fat loss: 1,8–2,2 g/kg. ')+fmtN(N.weight)+' × '+gkg(N.ppk)+' = '+Math.round(N.weight*N.ppk)+' g a day.</p>'
+    +(N.ppkSuggest&&Math.abs(N.ppk-N.ppkSuggest)>0.001?'<div class="note">The new default is '+gkg(N.ppkSuggest)+' g/kg ('+Math.round(N.weight*N.ppkSuggest)+' g). Your targets in use keep '+gkg(N.ppk)+' g/kg until you choose. <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn" data-nf-ppk="'+N.ppkSuggest+'">Use '+gkg(N.ppkSuggest)+' g/kg</button><button type="button" class="btn" data-nf-ppk-keep>Keep '+gkg(N.ppk)+'</button></div></div>':'')+'</div>'
+    +'<div class="nf-row"><div><p class="lbl" style="margin:0">Protein across the day</p><p class="muted small">Show protein per meal on Today.</p></div><button type="button" class="nf-switch'+(N.showMeals?' on':'')+'" data-nf-showmeals role="switch" aria-checked="'+N.showMeals+'" aria-label="Show protein per meal"><i></i></button></div>'
+    +(N.showMeals?'<div><label class="lbl" for="nf-meals">Protein meals a day</label><select class="inp" id="nf-meals" data-nf-meals>'+[3,4,5,6].map(function(n){return '<option value="'+n+'"'+(N.proteinMeals===n?' selected':'')+'>'+n+' meals · about '+Math.round(N.weight*N.ppk/n)+' g each</option>';}).join('')+'</select><p class="muted small" style="margin-top:4px">Spreading protein over the day, about every 3–4 hours, is a common recommendation. Choose foods that suit your schedule and that you tolerate well.</p></div>':'');
+  h+='<div><label class="lbl" for="nf-mode">Preferred phase</label><select class="inp" id="nf-mode" data-nf-mode>'+PHASES.map(function(x){return '<option value="'+x.id+'"'+(N.mode===x.id?' selected':'')+'>'+x.name+'</option>';}).join('')+'</select></div>';
+  if(N.mode!=="maintain")h+=nfInp("deficit","Deficit for "+p.name+" (%)",N.deficit[N.mode],String(p.def).replace(".",","),"decimal","Between "+p.range[0]+" and "+p.range[1]+"%.");
+  h+='<div><p class="lbl">Training days</p><div class="chips">'+WEEKDAYS.map(function(d){var on=N.trainDays.indexOf(d[0])>=0;return '<button type="button" class="chip'+(on?' on':'')+'" data-nf-day="'+d[0]+'" aria-pressed="'+on+'">'+d[1]+'</button>';}).join('')+'</div><p class="muted small" style="margin-top:6px">'+N.trainDays.length+' training and '+(7-N.trainDays.length)+' rest days a week. You can change a single day on Today.</p></div>';
+  h+='<div><p class="lbl">Typical training session</p><div class="grid2">'+nfInp("smin","Minutes",N.session.min,"e.g. 60","numeric")+'<div><p class="lbl">Intensity</p><div class="seg">'+[["light","Light"],["moderate","Mod."],["hard","Hard"]].map(function(x){var on=N.session.intensity===x[0];return '<button type="button" class="'+(on?'on':'')+'" data-nf-int="'+x[0]+'" aria-pressed="'+on+'">'+x[1]+'</button>';}).join('')+'</div></div></div><p class="muted small" style="margin-top:4px">Used to check whether your carbohydrate target suits your training. It doesn\'t change targets on its own.</p></div>';
+  h+='<div class="nf-row"><div><p class="lbl" style="margin:0">Carb cycling</p><p class="muted small">More carbs on training days, fewer on rest days. Weekly calories stay the same.</p></div><button type="button" class="nf-switch'+(N.cycling?' on':'')+'" data-nf-cycle role="switch" aria-checked="'+N.cycling+'" aria-label="Carb cycling"><i></i></button></div>';
+  if(N.cycling)h+=nfInp("cyclePct","Rest days: fewer carbs by (%)",N.cyclePct,"20","decimal","Between 5 and 40%. Training days get the same total back.");
+  h+='<details class="bi-why"><summary>Manual overrides (optional)</summary><div><p class="muted small">Leave empty to use the calculation. Protein and fat are never reduced for you.</p><div class="grid2">'+nfInp("okcal","Calories",N.over.kcal,"","numeric")+nfInp("op","Protein (g)",N.over.p,"","numeric")+nfInp("oc","Carbs (g)",N.over.c,"","numeric")+nfInp("of","Fat (g)",N.over.f,"","numeric")+'</div></div></details>';
+  h+='<details class="bi-why"><summary>About me (optional)</summary><div><div><label class="lbl" for="nf-fstatus">Cycle / menopause status</label><select class="inp" id="nf-fstatus" data-nf-fstatus>'+FEMALE_STATUS.map(function(o){return '<option value="'+o[0]+'"'+(N.female.status===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select></div>'
+    +'<div><label class="lbl" for="nf-hrt">Hormone therapy</label><select class="inp" id="nf-hrt" data-nf-hrt>'+HRT_OPTS.map(function(o){return '<option value="'+o[0]+'"'+(N.female.hrt===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select></div>'
+    +'<p class="muted small">Used only to show your own patterns and the relevant research notes. Targets aren\'t changed by cycle phase or perimenopause. Daily cycle or menopause symptoms, sleep, energy, hunger, recovery and training performance can be noted in My Body Intelligence → Fuel &amp; Recovery.</p></div></details>';
+  /* the result, with the calculation */
+  if(T.ok){
+    h+='<div class="ph-prev"><p class="lbl">'+esc(T.name)+'</p><p class="ph-k">'+fmtN(T.baseKcal)+' kcal</p><p class="ph-m">Protein '+T.p+' g · Carbs '+T.baseC+' g · Fat '+T.f+' g</p>'
+      +(T.cycling?'<p class="small">Training day: '+fmtN(T.week.kT)+' kcal, '+T.week.cT+' g carbs · Rest day: '+fmtN(T.week.kR)+' kcal, '+T.week.cR+' g carbs</p>':'')+(T.cycleOff?'<p class="muted small">'+esc(T.cycleOff)+'</p>':'')
+      +'<details class="bi-why"><summary>How is this calculated?</summary><div><p>'+(N.over.kcal!=null?'Calories: your manual target, '+fmtN(N.over.kcal)+' kcal.':'Calories = '+fmtN(T.maint)+' × (1 − '+fmtN(T.d)+'%) = '+fmtN(T.baseKcal)+' kcal (rounded to 10).')+'</p>'
+      +'<p>Protein = '+fmtN(N.weight)+' kg × '+fmtN(N.ppk)+' g/kg = '+T.p+' g'+(N.over.p!=null?' (manual)':'')+'.</p><p>Fat = '+fmtN(N.weight)+' kg × '+fmtN(N.fpk)+' g/kg = '+T.f+' g'+(N.over.f!=null?' (manual)':'')+'.</p>'
+      +'<p>Carbs = ('+fmtN(T.baseKcal)+' − '+T.p+'×4 − '+T.f+'×9) ÷ 4 = '+T.baseC+' g'+(N.over.c!=null?' (manual)':'')+'.</p><p>Check: '+T.p+'×4 + '+T.baseC+'×4 + '+T.f+'×9 = '+fmtN(4*T.p+4*T.baseC+9*T.f)+' kcal.</p>'
+      +(T.cycling?'<p>Week: '+T.week.t+' × '+fmtN(T.week.kT)+' + '+T.week.r+' × '+fmtN(T.week.kR)+' = '+fmtN(T.week.t*T.week.kT+T.week.r*T.week.kR)+' kcal, the same as 7 × '+fmtN(T.baseKcal)+' = '+fmtN(7*T.baseKcal)+' (± rounding).</p>':'')
+      +'<p class="muted">Maintenance: '+esc(T.maintSrc)+'.</p></div></details></div>';
+    T.warn.forEach(function(w){h+='<div class="note warn">'+esc(w)+'</div>';});
+    h+=whyTargetHTML(T,N,R);
+  } else h+='<div class="note warn">'+esc(T.need)+'</div>';
+  h+='<details class="bi-why"><summary>Evidence base</summary><div>'+evidenceListHTML()+'</div></details>';
+  h+=N.active?'<div class="nf-row"><p class="small" style="margin:0"><b>Using '+esc(T.name)+' targets.</b></p><button type="button" class="btn-line" data-ph-prev>Return to previous targets</button></div>'
+    :'<button type="button" class="btn-main" data-ph-use'+(!T.ok||T.invalid?' disabled':'')+'>Use these targets</button><p class="muted small">Your current targets'+(N.previous&&N.previous.kcal!=null?' ('+fmtN(N.previous.kcal)+' kcal, P '+N.previous.p+' · C '+N.previous.c+' · F '+N.previous.f+')':'')+' stay in use until then.</p>';
+  return h;
+}
+/* ----- Me: weekly cutting check-in ----- */
+function wAvg(from,to){var P=loadProg().filter(function(e){return e.weight!=null&&e.date>=from&&e.date<=to;});var by={};P.forEach(function(e){by[e.date]=e.weight;});var v=Object.keys(by).map(function(k){return by[k];});return {n:v.length,avg:v.length?v.reduce(function(a,b){return a+b;},0)/v.length:null};}
+function scaleAvg(key,days){var v=days.map(function(d){return dayCtx(d)[key];}).filter(function(x){return x!=null;});return {n:v.length,avg:v.length?v.reduce(function(a,b){return a+b;},0)/v.length:null};}
+function cuttingData(){
+  var t=todayISO(),cur=wAvg(dayAdd(t,-6),t),prev=wAvg(dayAdd(t,-13),dayAdd(t,-7)),o={cur:cur,prev:prev};
+  var W=loadProg().filter(function(e){return e.weight!=null;}).sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0;});o.latest=W[0]||null;
+  if(cur.n>=3&&prev.n>=3){o.kg=cur.avg-prev.avg;o.pct=o.kg/prev.avg*100;}
+  /* stable over multiple weeks: three consecutive 7-day averages, each with ≥3 weigh-ins, within ±0,2% of each other */
+  var w3=wAvg(dayAdd(t,-20),dayAdd(t,-14));o.w3=w3;
+  if(o.pct!=null&&w3.n>=3){var p2=(prev.avg-w3.avg)/w3.avg*100;o.stableWeeks=Math.abs(o.pct)<=0.2&&Math.abs(p2)<=0.2;}
+  else if(o.pct!=null)o.stableShort=Math.abs(o.pct)<=0.2;
+  o.c7=biConsistency(7);var d7=lastDays(7),d14=lastDays(14).slice(0,7);
+  ["energy","recovery","performance","hunger"].forEach(function(k){o[k]={cur:scaleAvg(k,d7),prev:scaleAvg(k,d14)};});
+  var M=loadMornings().filter(function(m){return String(m.at).slice(0,10)>=d7[0];}),sym={};
+  M.forEach(function(m){(m.sym||[]).forEach(function(s){sym[s.name]=(sym[s.name]||0)+1;});});
+  loadSignals().filter(function(s){return String(s.at).slice(0,10)>=d7[0];}).forEach(function(s){sgRealSym(s).forEach(function(x){sym[x]=(sym[x]||0)+1;});});
+  o.sym=sym;o.poorSleep=d7.filter(function(d){return daySleep(d)==="poor";}).length;o.sleepKnown=d7.filter(function(d){return daySleep(d);}).length;
+  return o;
+}
+function sgn2(v){var a=Math.abs(v).toFixed(2).replace(".",",");return (Math.abs(v)<0.005?"±":v>0?"+":"−")+a;}
+function trendTxt(x){if(x.cur.n<2||x.prev.n<2)return "Not enough data";var d=x.cur.avg-x.prev.avg;return fmt1(x.cur.avg)+" this week vs "+fmt1(x.prev.avg)+" last week"+(Math.abs(d)<0.3?" (about the same)":d>0?" (higher)":" (lower)");}
+function cuttingHTML(){
+  var o=cuttingData(),R=calcFuel(loadFuel()),N=loadNutr(),c7=o.c7,msgs=[];
+  var rows=[["Current weight",o.latest?fmtN(o.latest.weight)+" kg · "+dShort(o.latest.date):"Not enough data"],
+    ["7-day average",o.cur.n>=3?fmtN(r1(o.cur.avg))+" kg ("+o.cur.n+" weigh-ins)":"Not enough data"],
+    ["Previous 7-day average",o.prev.n>=3?fmtN(r1(o.prev.avg))+" kg ("+o.prev.n+" weigh-ins)":"Not enough data"],
+    ["Weekly change",o.pct!=null?sgn2(o.kg)+" kg ("+sgn2(o.pct)+"%)":"Not enough data"],
+    ["Average calories",c7.enough?fmtK(c7.avg.kcal)+" kcal ("+c7.complete.length+" complete days)":"Not enough data"],
+    ["Average protein",c7.enough?Math.round(c7.avg.p)+" g"+(R.protein!=null?" · target "+R.protein+" g":""):"Not enough data"],
+    ["Training performance",trendTxt(o.performance)],["Energy",trendTxt(o.energy)],["Recovery",trendTxt(o.recovery)]];
+  if(N.goal!=null&&o.cur.n>=3)rows.splice(3,0,["Goal weight",fmtN(N.goal)+" kg · "+fmtN(r1(Math.abs(o.cur.avg-N.goal)))+" kg "+(o.cur.avg>N.goal?"to go":"below goal")]);
+  if(o.stableWeeks)msgs.push("Your weight has been stable for about three weeks. Before changing anything, review how accurately food is logged, your activity, your recovery and then the calorie target. Targets are only changed if you choose to.");
+  else if(o.stableShort)msgs.push("Your weight trend is stable, but there isn't enough information to determine whether a calorie adjustment is needed.");
+  if(c7.enough&&R.protein!=null){var low=c7.complete.filter(function(d){return d.t.p<R.protein*0.9;}).length;if(low>=3)msgs.push("Your protein intake has been below target on "+low+" of "+c7.complete.length+" complete days this week.");}
+  var trainLow=lastDays(7).filter(function(d){var c=dayCtx(d);return (c.act.indexOf("strength")>=0||c.act.indexOf("cardio")>=0||c.dayType==="training")&&c.energy!=null&&c.energy<=2;}).length;
+  if(trainLow>=2)msgs.push("Your energy has been lower on "+trainLow+" recent training days. Review your recovery and food intake.");
+  var worse=["energy","recovery","performance"].filter(function(k){var x=o[k];return x.cur.n>=2&&x.prev.n>=2&&x.cur.avg<=x.prev.avg-0.5;});
+  if(worse.length&&R.phase&&R.phase.ok&&R.phase.mode!=="maintain")msgs.push("Your "+worse.join(" and ")+" ratings are lower than last week. Consider reviewing the cutting intensity, for example a gentler phase, rather than eating less.");
+  if(o.sleepKnown>=3&&o.poorSleep>=3)msgs.push("Poor sleep was noted on "+o.poorSleep+" of the last 7 days. Sleep affects hunger, energy and recovery.");
+  var sk=Object.keys(o.sym).filter(function(k){return /nausea|headache|migraine|bloat|stomach|constipation|diarrh|gas|heartburn|reflux/i.test(k);});
+  var F=reviewFlags(),T0=R.phase&&R.phase.ok?R.phase:null,cpk=T0&&N.weight?T0.baseC/N.weight:null;
+  if(cpk!=null&&cpk<3&&(N.session.intensity==="hard"||(N.session.min!=null&&N.session.min>=75)))F.push({k:"carbs",t:"Your carbohydrate target ("+fmtN(r1(cpk))+" g/kg) is below the 3–7 g/kg range suggested for training, and your sessions are long or hard."});
+  if(F.length&&T0&&T0.mode!=="maintain")msgs.unshift("Worth reviewing: "+F.map(function(x,i){var t=x.t.replace(/\.$/,"");return i?t.charAt(0).toLowerCase()+t.slice(1):t;}).join("; ")+". Consider your recovery, food intake and the cutting intensity before eating less.");
+  else if(F.length)msgs.unshift("Worth reviewing: "+F.map(function(x,i){var t=x.t.replace(/\.$/,"");return i?t.charAt(0).toLowerCase()+t.slice(1):t;}).join("; ")+".");
+  var h='<dl class="sg-dl cp-dl">'+rows.map(function(r){return '<div><dt>'+r[0]+'</dt><dd'+(r[1]==="Not enough data"?' class="muted"':'')+'>'+esc(r[1])+'</dd></div>';}).join('')+'</dl>';
+  if(sk.length)h+='<p class="small">Noted this week: '+esc(sk.map(function(k){return k.toLowerCase()+" "+o.sym[k]+"×";}).join(", "))+' (morning checks and Food Detective).</p>';
+  h+=femalePatternsHTML();
+  h+=msgs.length?'<ul class="sg-pat">'+msgs.map(function(m){return '<li>'+esc(m)+'</li>';}).join('')+'</ul>':'';
+  h+='<p class="muted small">Weekly change = (this 7-day average − previous 7-day average) ÷ previous × 100. It needs at least 3 weigh-ins in each week. These are patterns in your records, not proven causes. Targets never change without your approval.</p>';
+  return h;
+}
+/* ----- events ----- */
+function nutrSet(fn){var N=loadNutr();fn(N);saveNutr(N);render();if(APP.sheet&&APP.sheet.view==="phase")renderSheet();}
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("button");if(!t)return;var s=APP.sheet;
+  if(t.hasAttribute("data-open-phase")){openSheet({view:"phase"});return;}
+  if(t.hasAttribute("data-ph")&&s&&s.view==="phase"){var id=t.getAttribute("data-ph"),N=loadNutr();
+    if(N.active&&id!==N.mode){var old=N.mode,T=phaseTargets(N,calcFuelBase(loadFuel()),id,todayISO());if(T.ok&&!T.invalid){nutrSet(function(n){n.mode=id;});s.pick=null;renderSheet();toast(PH[id].name+" targets in use",function(){nutrSet(function(n){n.mode=old;});toast("Back to "+PH[old].name);});return;}}
+    s.pick=id;renderSheet();return;}
+  if(t.hasAttribute("data-daytype")){var v=t.getAttribute("data-daytype");setDayCtx(todayISO(),{dayType:v});render();if(s)renderSheet();return;}
+  if(t.hasAttribute("data-ph-use")){var pick=s&&s.view==="phase"&&s.pick?s.pick:null;nutrSet(function(n){if(pick)n.mode=pick;n.active=true;});if(s&&s.view==="phase"){s.pick=null;renderSheet();}toast(PH[loadNutr().mode].name+" targets in use",function(){nutrSet(function(n){n.active=false;});toast("Previous targets restored");});return;}
+  if(t.hasAttribute("data-ph-prev")){nutrSet(function(n){n.active=false;});toast("Previous targets restored",function(){nutrSet(function(n){n.active=true;});});return;}
+  if(t.hasAttribute("data-ph-settings")){closeSheet();var o=ui().open||{};o["me-nutr"]=true;setUi({open:o});go("me");return;}
+  if(t.hasAttribute("data-ph-maint")){var mv=num(($("#ph-maint")||{}).value);if(mv==null||mv<1000||mv>5000){toast("Enter maintenance between 1000 and 5000 kcal");return;}nutrSet(function(n){n.maint=Math.round(mv);n.maintProvisional=true;});return;}
+  if(t.hasAttribute("data-nf-day")){var dd2=+t.getAttribute("data-nf-day");nutrSet(function(n){var i=n.trainDays.indexOf(dd2);if(i>=0)n.trainDays.splice(i,1);else n.trainDays.push(dd2);});return;}
+  if(t.hasAttribute("data-nf-cycle")){nutrSet(function(n){n.cycling=!n.cycling;});return;}
+  if(t.hasAttribute("data-nf-ppk")){var pv=+t.getAttribute("data-nf-ppk");nutrSet(function(n){n.ppk=pv;delete n.ppkSuggest;});toast("Protein "+gkg(pv)+" g/kg");return;}
+  if(t.hasAttribute("data-nf-ppk-keep")){nutrSet(function(n){delete n.ppkSuggest;});return;}
+  if(t.hasAttribute("data-nf-showmeals")){nutrSet(function(n){n.showMeals=!n.showMeals;});return;}
+  if(t.hasAttribute("data-nf-int")){var iv=t.getAttribute("data-nf-int");nutrSet(function(n){n.session.intensity=n.session.intensity===iv?null:iv;});return;}
+});
+var NF_RULES={weight:[30,300,"weight"],goal:[30,300,"goal"],maint:[1000,5000,"maint"],ppk:[1.2,3,"ppk"],smin:[10,300,"session.min"],fpk:[0.5,1.5,"fpk"],cyclePct:[5,40,"cyclePct"],okcal:[800,6000,"over.kcal"],op:[20,400,"over.p"],oc:[0,800,"over.c"],of:[10,300,"over.f"]};
+document.addEventListener("change",function(ev){
+  var t=ev.target;
+  if(t.hasAttribute&&t.hasAttribute("data-nf-mode")){nutrSet(function(n){n.mode=t.value;});return;}
+  if(t.hasAttribute&&t.hasAttribute("data-nf-meals")){nutrSet(function(n){n.proteinMeals=+t.value;});return;}
+  if(t.hasAttribute&&t.hasAttribute("data-nf-fstatus")){nutrSet(function(n){n.female.status=t.value;});return;}
+  if(t.hasAttribute&&t.hasAttribute("data-nf-hrt")){nutrSet(function(n){n.female.hrt=t.value;});return;}
+  if(t.hasAttribute&&t.hasAttribute("data-nf-prov")){nutrSet(function(n){n.maintProvisional=t.checked;});return;}
+  if(!t.hasAttribute||!t.hasAttribute("data-nf"))return;var k=t.getAttribute("data-nf"),raw=String(t.value).trim(),v=raw===""?null:num(raw);
+  if(k==="deficit"){var N=loadNutr(),r=PH[N.mode].range;if(v==null||v<r[0]||v>r[1]){toast("Use "+r[0]+"–"+r[1]+"% for "+PH[N.mode].name);render();return;}nutrSet(function(n){n.deficit[n.mode]=r1(v);});return;}
+  var rule=NF_RULES[k];if(!rule)return;
+  var required=k==="weight"||k==="ppk"||k==="fpk"||k==="cyclePct";
+  if((v==null&&(required||raw!==""))||(v!=null&&(v<rule[0]||v>rule[1]))){toast("Enter a value between "+fmtN(rule[0])+" and "+fmtN(rule[1]));render();return;}
+  nutrSet(function(n){var path=rule[2].split(".");var val=v==null?null:(k==="okcal"||k==="op"||k==="oc"||k==="of"||k==="maint"||k==="smin"?Math.round(v):Math.round(v*100)/100);if(path.length===2)n[path[0]][path[1]]=val;else n[path[0]]=val;if(k==="maint"&&val!=null)n.maintProvisional=true;});
+});
 
 
 /* ============================== render ============================== */
@@ -2091,6 +2420,7 @@ var TABS=[["today","Today",'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"
 var BRAND='<div class="brand"><span class="mark" aria-hidden="true">B</span><p class="brand-t">Body Fuel Lab <span>– Food Tracker</span></p></div>';
 function render(){
   $("#nav").innerHTML=TABS.map(function(t){var on=APP.tab===t[0];return '<button type="button" data-tab="'+t[0]+'" class="'+(on?'on':'')+'"'+(on?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true">'+t[2]+'</svg>'+t[1]+'</button>';}).join('');
+  try{recordTarget(todayISO(),calcFuel(loadFuel()));}catch(e){}
   $("#view").className="page"+(APP.tab==="signals"?" wide":"");
   $("#view").innerHTML=BRAND+(APP.tab==="foods"?viewFoods():APP.tab==="me"?viewMe():APP.tab==="signals"?viewSignals():viewToday());
 }
@@ -2106,6 +2436,7 @@ function renderSheet(focus){
   if(s.view==="log"){title="Log food or drink";body=slotsHTML(s.slot)+'<label class="search">'+ICON.search+'<input id="s-q" type="search" placeholder="Search food, drink or barcode" value="'+esc(s.q||"")+'" autocomplete="off" aria-label="Search food, drink or barcode"></label><div id="s-res" class="res">'+foodsListHTML(s.q,"s")+'</div>';}
   else if(s.view==="portion"){title=s.food.name;back=!!s.from;body=portionHTML(s);}
   else if(s.view==="manual"){title="Enter label values";back=!!s.from;body=manualHTML(s);}
+  else if(s.view==="phase"){title="My Nutrition Phase";body=phaseSheetHTML(s);}
   else if(s.view==="insights"){title="All insights";body=insightsSheetHTML();}
   else if(s.view==="morning"){title=s.d.id?"Edit morning check":"How do I feel today?";body=morningFormHTML(s);}
   else if(s.view==="signal"){title=s.d.id?"Edit entry":"Body Signals";body=signalFormHTML(s);}
@@ -2273,7 +2604,7 @@ applyTheme();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 
