@@ -78,9 +78,8 @@ main{padding-block:26px calc(96px + env(safe-area-inset-bottom,0px));padding-lef
 .mrow-top .n{font-size:21px;font-weight:600}
 .mrow-top .v{font-size:21px;font-weight:700;white-space:nowrap}
 .mrow-top .v span{color:var(--muted);font-weight:600}
-.mrow-top .v.left{font-weight:800}
-.mrow-top .v.over{color:var(--over)}
-.mrow-eat{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:-2px}
+.mrow-left{font-size:19px;font-weight:800;letter-spacing:.01em;color:var(--ink);font-variant-numeric:tabular-nums;margin-top:-1px}
+.mrow-left.over{color:var(--over)}
 .bar{height:12px;border-radius:999px;background:var(--track);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:999px;max-width:100%;transition:width .3s}
 .bar.p i{background:var(--prot)} .bar.c i{background:var(--carb)} .bar.f i{background:var(--fat)} .bar i.over{background:var(--over)}
@@ -1276,7 +1275,7 @@ function budgetHTML(f,R,t,day){
     h+=[["p","Protein",t.p,R.protein],["c","Carbohydrates",t.c,R.carbs],["f","Fat",t.f,R.fat]].map(function(m){
       if(m[3]==null)return "";var ov=m[2]>m[3]+0.5,pc=m[3]?Math.min(100,m[2]/m[3]*100):0;
       var eat=Math.round(m[2]),left=m[3]-eat;
-      return '<div class="mrow" id="m-'+m[0]+'"><div class="mrow-top"><span class="n">'+m[1]+'</span><span class="v left'+(left<0?' over':'')+'" id="m-'+m[0]+'-left">'+(left<0?fmtN(-left)+' g over':fmtN(left)+' g left')+'</span></div><div class="bar '+m[0]+'"><i style="width:'+pc.toFixed(1)+'%"'+(ov?' class="over"':'')+'></i></div><p class="mrow-eat">'+fmtN(eat)+' / '+fmtN(m[3])+' g eaten</p></div>';
+      return '<div class="mrow" id="m-'+m[0]+'"><div class="mrow-top"><span class="n">'+m[1]+'</span><span class="v">'+fmtN(eat)+' <span>/ '+fmtN(m[3])+' g</span></span></div><div class="bar '+m[0]+'"><i style="width:'+pc.toFixed(1)+'%"'+(ov?' class="over"':'')+'></i></div><p class="mrow-left'+(left<0?' over':'')+'" id="m-'+m[0]+'-left">'+(left<0?fmtN(-left)+' g OVER':fmtN(left)+' g LEFT')+'</p></div>';
     }).join('');
   }
   if(R.kcal!=null)h+=proteinMealsHTML(day,R);
