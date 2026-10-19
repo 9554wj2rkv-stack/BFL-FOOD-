@@ -175,6 +175,35 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .toast span{min-width:0}
 .toast button{border:0;background:transparent;color:var(--on-btn);font-weight:800;text-decoration:underline;min-height:40px;padding:0 8px}
 .toast.plain{padding-right:18px}
+/* smart fuel */
+.sf-card{padding:0;gap:0}
+.sf-head b{font-size:20px}
+.sf-body{padding:0 18px 18px;display:flex;flex-direction:column;gap:8px}
+.sf-day{display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:17px}
+.sf-day span{min-width:110px;text-align:center}
+.sf-rems{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.sf-rem{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 4px;text-align:center;display:flex;flex-direction:column}
+.sf-rem b{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.sf-rem span{font-size:13px;color:var(--muted);font-weight:600}
+.sf-rem.over b{color:var(--over)}
+.sf-list{display:flex;flex-direction:column;gap:12px}
+.sf-idea{border:1px solid var(--line);border-radius:18px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.sf-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sf-top b{font-size:19px;font-weight:800}
+.sf-ing{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:8px}
+.sf-ing .n{flex:1;min-width:0;font-size:17px;font-weight:700;overflow-wrap:anywhere}
+.sf-ing small{display:block;font-size:14px;color:var(--muted);font-weight:500}
+.sf-step{display:flex;gap:6px;flex:none}
+.sf-step .icon-btn{font-size:22px;font-weight:700;width:42px;height:42px}
+.sf-nut{font-size:17px}
+.sf-prev{font-size:15px;color:var(--ink-2);background:var(--raise);border-radius:12px;padding:8px 10px}
+.sf-acts{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.sf-kit{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px}
+.sf-kit-top{display:flex;align-items:flex-start;gap:8px}
+.sf-kit-top .n{flex:1;min-width:0;font-size:17px;font-weight:700}
+.sf-kit-top small{display:block;font-size:14px;color:var(--muted);font-weight:500}
+.sf-av button{min-height:40px;font-size:15px}
+.sf-saved{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:4px}
 /* evidence */
 .ev-tag{display:inline-block;font-size:13px;font-weight:800;padding:2px 9px;border-radius:999px;margin:0 6px 4px 0;background:var(--card);color:var(--ink);border:1.5px solid currentColor}
 .ev-strong{background:var(--raise);color:var(--ok)}
@@ -1310,7 +1339,7 @@ function viewToday(){
   var day=todayISO(),f=loadFuel(),R=calcFuel(f),t=dayTotals(day);recordTarget(day,R);
   var pillTxt=R.phase&&R.phase.ok?R.phase.name:(R.kcal!=null?STRAT_PILL[f.strategy]:"Nutrition phase");
   return '<header class="head"><span class="head-date">Today · '+esc(dateShort())+'</span><button type="button" class="pill pill-btn" data-open-phase aria-label="My Nutrition Phase: '+esc(pillTxt)+'">'+esc(pillTxt)+'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></header>'
-    +budgetHTML(f,R,t,day)
+    +budgetHTML(f,R,t,day)+smartFuelCardHTML()
     +'<button type="button" class="btn-main" data-act="log">'+ICON.plus+'Log food or drink</button>'
     +againHTML()+logHTML(day)+completeTodayHTML(day)+biCardHTML();
 }
@@ -2417,6 +2446,262 @@ document.addEventListener("change",function(ev){
   nutrSet(function(n){var path=rule[2].split(".");var val=v==null?null:(k==="okcal"||k==="op"||k==="oc"||k==="of"||k==="maint"||k==="smin"?Math.round(v):Math.round(v*100)/100);if(path.length===2)n[path[0]][path[1]]=val;else n[path[0]]=val;if(k==="maint"&&val!=null)n.maintProvisional=true;});
 });
 
+/* ============================== SMART FUEL ============================== */
+/* Ideas only. Smart Fuel READS the diary and targets and NEVER writes to bflfood_diary.
+   Quantities you change live in APP.sf (temporary, in memory). Own storage:
+   bflfood_kitchen_v1 (My Kitchen), bflfood_ideas_v1 (Saved Food Ideas), bflfood_smartfuel_v1 (preferences, excluded foods).
+   Nutrition comes from the app's food list, your own foods, or USDA values noted below. Missing values are shown as missing. */
+K.kitchen="bflfood_kitchen_v1";K.ideas="bflfood_ideas_v1";K.sfprefs="bflfood_smartfuel_v1";
+var SF_EXTRA={egg:{name:"Egg (whole)",per100:{kcal:143,p:12.6,c:0.72,f:9.51,fib:0},src:"USDA FoodData Central, FDC 171287"}};
+/* how each ingredient is portioned: unit = one piece in grams (from the food list or USDA), otherwise grams */
+var SF_ING={
+  rice_cakes:{food:["db","rice_cakes"],unit:["rice cake","rice cakes",9],def:3},
+  banana:{food:["db","banana"],unit:["medium banana","medium bananas",118],def:1},
+  gf_oats:{food:["db","gf_oats"],g:40,step:10},
+  egg:{food:["sf","egg"],unit:["medium egg","medium eggs",44],def:2},
+  honey:{food:["db","honey"],unit:["tsp honey","tsp honey",7],def:1},
+  white_rice:{food:["db","jasmine_rice","cooked"],g:150,step:25,note:"Values for cooked jasmine rice (a white rice)."},
+  potato:{food:["db","potato","cooked"],g:200,step:50},
+  apple:{food:["db","apple"],unit:["medium apple","medium apples",180],def:1},
+  rice_protein:{food:null,g:30,step:5},
+  collagen:{food:null,g:20,step:5},
+  gf_bread:{food:["db","gf_bread"],g:40,step:10},
+  chicken_breast:{food:["db","chicken_breast","cooked"],g:120,step:20},
+  white_fish:{food:["db","white_fish","cooked"],g:150,step:25},
+  tuna:{food:["db","tuna"],g:100,step:20},
+  blueberries:{food:["db","blueberries"],g:100,step:25},
+  sweet_potato:{food:["db","sweet_potato"],g:200,step:50},
+  gf_pasta:{food:["db","gf_pasta","cooked"],g:180,step:20},
+  pineapple:{food:["db","pineapple","raw"],g:150,step:25}};
+var SF_STARTERS=[["rice_cakes","Rice cakes"],["banana","Bananas"],["gf_oats","Gluten-free oats"],["egg","Eggs"],["honey","Honey"],["white_rice","White rice"],["potato","Potatoes"],["apple","Apples"],["rice_protein","Rice protein"],["collagen","Collagen protein"],["gf_bread","Gluten-free bread"]];
+var SF_IDEAS=[
+  {id:"banana_cakes",name:"Banana + rice cakes",items:[["banana",1],["rice_cakes",3]],prep:"1 min"},
+  {id:"cakes_honey",name:"Rice cakes with honey",items:[["rice_cakes",3],["honey",2]],prep:"1 min"},
+  {id:"porridge",name:"Porridge with banana and honey",items:[["gf_oats",40],["banana",1],["honey",1]],prep:"5 min",how:"Oats cooked in water."},
+  {id:"apple_cakes",name:"Apple + rice cakes",items:[["apple",1],["rice_cakes",2]],prep:"1 min"},
+  {id:"banana",name:"Banana",items:[["banana",1]],prep:"0 min"},
+  {id:"apple",name:"Apple",items:[["apple",1]],prep:"0 min"},
+  {id:"rice_plain",name:"Bowl of rice",items:[["white_rice",200]],prep:"15 min"},
+  {id:"rice_eggs",name:"Rice with eggs",items:[["white_rice",150],["egg",2]],prep:"15 min",how:"Boiled or poached eggs keep added fat low."},
+  {id:"potato_eggs",name:"Potatoes with eggs",items:[["potato",250],["egg",2]],prep:"25 min"},
+  {id:"toast_honey",name:"Gluten-free toast with banana and honey",items:[["gf_bread",40],["banana",1],["honey",1]],prep:"3 min"},
+  {id:"egg_cakes",name:"Boiled egg + rice cakes",items:[["egg",1],["rice_cakes",2]],prep:"10 min"},
+  {id:"protein_banana",name:"Banana + rice protein shake",items:[["banana",1],["rice_protein",30]],prep:"2 min",how:"Shaken with water."},
+  {id:"collagen_oats",name:"Porridge with collagen",items:[["gf_oats",40],["collagen",20],["honey",1]],prep:"5 min"},
+  {id:"rice_fish",name:"Rice with white fish",items:[["white_rice",180],["white_fish",150]],prep:"20 min"},
+  {id:"potato_tuna",name:"Potatoes with tuna",items:[["potato",250],["tuna",100]],prep:"25 min"},
+  {id:"oats_berries",name:"Oats with blueberries",items:[["gf_oats",50],["blueberries",100]],prep:"5 min"},
+  {id:"sweet_chicken",name:"Sweet potato with chicken",items:[["sweet_potato",250],["chicken_breast",120]],prep:"30 min"},
+  {id:"pasta_chicken",name:"Gluten-free pasta with chicken",items:[["gf_pasta",200],["chicken_breast",120]],prep:"20 min"},
+  {id:"pineapple",name:"Pineapple",items:[["pineapple",150]],prep:"2 min"}];
+var SF_CATS=[["carbs","Increase my carbohydrates"],["light","Something light"],["lowfat","Keep added fat low"]];
+/* ----- storage ----- */
+function loadKitchen(){
+  var k=DB.get(K.kitchen,null);
+  if(!k||!Array.isArray(k.items)){k={v:1,items:SF_STARTERS.map(function(s){return {id:s[0],name:s[1],available:null,starter:true};})};DB.set(K.kitchen,k);}
+  return k;
+}
+function saveKitchen(k){DB.set(K.kitchen,k);}
+function sfPrefs(){var p=DB.get(K.sfprefs,{})||{};p.excluded=Array.isArray(p.excluded)?p.excluded:[];return p;}
+function saveSfPrefs(p){DB.set(K.sfprefs,p);}
+function loadIdeas(){var a=DB.get(K.ideas,[]);return Array.isArray(a)?a:[];}
+/* ----- foods ----- */
+function sfFood(key){
+  var kit=loadKitchen().items.filter(function(x){return x.id===key;})[0];
+  if(kit&&kit.link){if(kit.link.kind==="custom"){var c=DB.get(K.custom,[]).filter(function(x){return x.id===kit.link.ref;})[0];if(c){var o=clone(c);o.src="custom";o.ref=c.id;return o;}}
+    if(kit.link.kind==="db")return dbFood(kit.link.ref,kit.link.state);}
+  var d=SF_ING[key];if(!d||!d.food)return null;
+  if(d.food[0]==="db")return dbFood(d.food[1],d.food[2]);
+  var e=SF_EXTRA[d.food[1]];return {src:"sf",ref:d.food[1],name:e.name,unit:"g",per100:clone(e.per100),cat:null,presets:[],ingredients:null,allergens:[],traces:[],allergenText:"",source:e.src};
+}
+function sfIng(key){var d=SF_ING[key];if(d)return d;var kit=loadKitchen().items.filter(function(x){return x.id===key;})[0];return {food:null,g:kit&&kit.g||100,step:kit&&kit.step||10};}
+function sfName(key){var kit=loadKitchen().items.filter(function(x){return x.id===key;})[0];if(kit)return kit.name;var f=sfFood(key);return f?f.name:key;}
+function qtyLabel(key,q){var d=sfIng(key);if(d.unit)return fmtN(q)+" "+(q===1?d.unit[0]:d.unit[1])+" ("+fmtN(Math.round(q*d.unit[2]))+" g)";return fmtN(q)+" g";}
+function gramsOf(key,q){var d=sfIng(key);return d.unit?q*d.unit[2]:q;}
+/* food-profile check: reuses the existing profile. Gluten-free-labelled foods are never auto-excluded, only flagged. */
+function sfCheck(food){
+  var out={exclude:[],caution:[]};if(!food)return out;var r=checkFood(food);
+  r.hits.forEach(function(h){if(h.level==="noteval"||h.level==="tolerated")return;
+    var gf=h.reasons.every(function(x){return /^Labelled|Sold as gluten-free/.test(x);});
+    if(gf)out.caution.push("Labelled gluten-free. Check the label of your product; that isn't a guarantee for you.");
+    else if(h.level==="allergy"||h.level==="intolerance"||h.level==="avoid")out.exclude.push(h.c.name+" ("+STATUS_LABEL[h.level].toLowerCase()+")");
+    else out.caution.push(h.c.name+": "+STATUS_LABEL[h.level].toLowerCase()+". "+h.reasons[0]);});
+  r.insufficient.forEach(function(c){out.caution.push(c.name+" content isn't known for this food.");});
+  return out;
+}
+/* ----- live numbers for a day ----- */
+function sfDay(){var t=todayISO(),d=(APP.sf&&APP.sf.day)||t;return d>t?t:d;}
+function sfTargets(day){
+  if(day===todayISO()){var R=calcFuel(loadFuel(),day);return {kcal:R.kcal,p:R.protein,c:R.carbs,f:R.fat,src:"current"};}
+  var h=targetFor(day);if(h)return {kcal:h.kcal,p:h.p,c:h.c,f:h.f,src:"saved"};
+  var R2=calcFuel(loadFuel(),day);return {kcal:R2.kcal,p:R2.protein,c:R2.carbs,f:R2.fat,src:"today's targets (none saved for that day)"};
+}
+function sfRemaining(day){
+  var T=sfTargets(day),e=dayTotals(day),r={T:T,eaten:e,ok:T.kcal!=null&&T.p!=null&&T.c!=null&&T.f!=null};
+  if(!r.ok)return r;r.k=Math.round(T.kcal-e.kcal);r.p=Math.round(T.p-e.p);r.c=Math.round(T.c-e.c);r.f=Math.round(T.f-e.f);
+  var mk=4*T.p+4*T.c+9*T.f;r.mismatch=Math.abs(mk-T.kcal)>50?mk:null;return r;
+}
+/* ----- ideas: totals, filters, ranking (deterministic) ----- */
+function ideaQty(idea){var s=APP.sf||{},o=(s.qty||{})[idea.id]||{};return idea.items.map(function(it,i){return o[i]!=null?o[i]:it[1];});}
+function ideaTotals(idea,qs){
+  var t={kcal:0,p:0,c:0,f:0},missing=[],ex=[],caut=[];
+  idea.items.forEach(function(it,i){var f=sfFood(it[0]);if(!f||!f.per100||f.per100.kcal==null){missing.push(sfName(it[0]));return;}
+    var pn=portion(f.per100,gramsOf(it[0],qs[i]));["kcal","p","c","f"].forEach(function(k){if(pn[k]!=null)t[k]+=pn[k];});
+    var ck=sfCheck(f);ck.exclude.forEach(function(x){ex.push(sfName(it[0])+": "+x);});ck.caution.forEach(function(x){caut.push(sfName(it[0])+": "+x);});});
+  t.missing=missing;t.exclude=ex;t.caution=caut;return t;
+}
+function kitchenAvail(){var m={};loadKitchen().items.forEach(function(x){m[x.id]=x.available;});return m;}
+function sfCandidates(){
+  var L=SF_IDEAS.slice(),kit=loadKitchen().items;
+  kit.forEach(function(x){if(!x.starter&&x.link)L.push({id:"own_"+x.id,name:x.name,items:[[x.id,x.g||100]],prep:"",own:true});});
+  return L;
+}
+function rankIdeas(cat,scope,day){
+  var R=sfRemaining(day),av=kitchenAvail(),P=sfPrefs(),out=[],skipped={missing:0,excluded:0,kitchen:0,category:0};
+  sfCandidates().forEach(function(idea){
+    if(idea.items.some(function(it){return P.excluded.indexOf(it[0])>=0;})){skipped.excluded++;return;}
+    var inKit=idea.items.every(function(it){return av[it[0]]===true;});
+    if(scope==="kitchen"&&!inKit){skipped.kitchen++;return;}
+    var qs=ideaQty(idea),T=ideaTotals(idea,qs);
+    if(T.missing.length){skipped.missing++;return;}
+    if(T.exclude.length){skipped.excluded++;return;}
+    var fit=cat==="carbs"?T.c>=20:cat==="light"?T.kcal<=260:T.f<=5;if(!fit){skipped.category++;return;}
+    var s=0;
+    if(R.ok){
+      if(cat==="carbs")s+=R.c>0?Math.min(T.c,R.c)/Math.max(R.c,1)*4:0;
+      if(cat==="light")s+=(300-Math.min(T.kcal,300))/100;
+      if(cat==="lowfat")s+=3-Math.min(T.f,15)/5;
+      if(R.f<0)s-=T.f/4;
+      if(R.k>0&&T.kcal>R.k)s-=2;
+      if(R.p>15)s+=Math.min(T.p,R.p)/Math.max(R.p,1);
+    }
+    s+=idea.items.filter(function(it){return av[it[0]]===true;}).length/idea.items.length;
+    out.push({idea:idea,qs:qs,T:T,score:s,inKit:inKit});
+  });
+  out.sort(function(a,b){return b.score-a.score||SF_IDEAS.indexOf(a.idea)-SF_IDEAS.indexOf(b.idea);});
+  return {list:out,R:R,skipped:skipped};
+}
+function g0(n){var r=Math.round(n);return n>0&&n<0.5?"<1":fmtN(r);}
+function whyFits(T,R){
+  if(!R.ok)return "Your daily targets aren't set up yet, so this is a general idea.";
+  var p=[];
+  if(R.c>0&&T.c>=15)p.push("your carbohydrates are "+R.c+" g below target, and this adds about "+g0(T.c)+" g");
+  else if(R.c<=0&&T.c>=15)p.push("it adds about "+g0(T.c)+" g carbohydrates");
+  if(R.f<0)p.push("fat is "+(-R.f)+" g over target, and this has about "+g0(T.f)+" g");
+  else if(T.f<=3)p.push("it has relatively little fat ("+g0(T.f)+" g)");
+  if(R.p>15&&T.p>=10)p.push("it adds "+g0(T.p)+" g protein toward the "+R.p+" g left");
+  if(R.k>0)p.push(T.kcal<=R.k?"it fits within the "+R.k+" kcal you have left":"it's about "+Math.round(T.kcal-R.k)+" kcal more than you have left today");
+  var s=p.join("; ");return s?s.charAt(0).toUpperCase()+s.slice(1)+".":"An option if you'd like something.";
+}
+function leftTxt(v,u){return v>=0?fmtN(v)+" "+u+" left":fmtN(-v)+" "+u+" over";}
+/* ----- rendering ----- */
+function smartFuelCardHTML(){
+  var open=ui().sfOpen!==false,k=loadKitchen().items.filter(function(x){return x.available===true;}).length,n=loadIdeas().length;
+  return '<section class="card sf-card" aria-label="Smart Fuel"><button type="button" class="bi-head sf-head" data-sf-toggle aria-expanded="'+open+'"><span><b>Smart Fuel</b>'+(open?'<small>Ideas based on your nutrition and your kitchen.</small>':'')+'</span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" class="bi-chev'+(open?' up':'')+'"><path d="M6 9l6 6 6-6"/></svg></button>'
+    +(open?'<div class="sf-body"><button type="button" class="btn-main" data-sf-open>What could I eat?</button><p class="muted small">My Kitchen: '+k+' available · '+n+' saved idea'+(n===1?'':'s')+'. Ideas are never logged for you.</p></div>':'')+'</section>';
+}
+function remChip(label,v,u){return '<div class="sf-rem'+(v<0?' over':'')+'"><b>'+(v<0?fmtN(-v):fmtN(v))+' '+u+'</b><span>'+label+(v<0?' over':' left')+'</span></div>';}
+function smartFuelSheetHTML(s){
+  var day=sfDay(),t=todayISO(),R=sfRemaining(day),h='';
+  var y=parseISO(t);y.setDate(y.getDate()-1);var lbl=day===t?"Today":day===isoOf(y)?"Yesterday":dShort(day);
+  h+='<div class="sf-day"><button type="button" class="cr-arrow" data-sf-day="-1" aria-label="Previous day"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span id="sf-day">'+esc(lbl)+'</span><button type="button" class="cr-arrow" data-sf-day="1" aria-label="Next day"'+(day===t?' disabled':'')+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></div>';
+  if(!R.ok)h+='<div class="note">Set up your daily targets in Me to see what\'s left. Ideas below are general.</div>';
+  else{h+='<div class="sf-rems" id="sf-rems">'+remChip("Calories",R.k,"kcal")+remChip("Protein",R.p,"g")+remChip("Carbs",R.c,"g")+remChip("Fat",R.f,"g")+'</div>';
+    if(R.T.src!=="current"&&R.T.src!=="saved")h+='<p class="muted small">No target was saved for that day, so '+esc(R.T.src)+'.</p>';
+    if(R.mismatch)h+='<div class="note warn">Your calorie target ('+fmtN(R.T.kcal)+' kcal) and macro targets (about '+fmtN(Math.round(R.mismatch))+' kcal) don\'t match. Nothing was changed. Review your targets in Me.</div>';}
+  var P=sfPrefs(),prof=consList(),need=["gluten","soy","nuts"].filter(function(id){var c=prof.filter(function(x){return x.id===id;})[0];return c&&c.status==="noteval";});
+  if(need.length&&!P.profileAsked)h+='<div class="note">You avoid gluten, soy and almonds. Your food profile doesn\'t include '+(need.length===3?'them':'all of them')+' yet. <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn" data-sf-profile>Set as “Prefer to avoid”</button><button type="button" class="btn" data-sf-profile-no>Not now</button></div></div>';
+  var cat=s.cat||P.cat||"carbs",scope=s.scope||P.scope||"kitchen";
+  h+='<div class="chips" role="group" aria-label="What would you like?">'+SF_CATS.map(function(c){var on=cat===c[0];return '<button type="button" class="chip'+(on?' on':'')+'" data-sf-cat="'+c[0]+'" aria-pressed="'+on+'">'+c[1]+'</button>';}).join('')+'</div>';
+  h+='<div class="seg" role="group"><button type="button" class="'+(scope==="kitchen"?'on':'')+'" data-sf-scope="kitchen" aria-pressed="'+(scope==="kitchen")+'">My Kitchen</button><button type="button" class="'+(scope==="all"?'on':'')+'" data-sf-scope="all" aria-pressed="'+(scope==="all")+'">All Ideas</button></div>';
+  var RK=rankIdeas(cat,scope,day),show=RK.list.slice(0,(s.page||1)*3);APP.sfShown=show;
+  if(!show.length){h+='<div class="note">'+(scope==="kitchen"?'No ideas match with what\'s marked available in My Kitchen. Confirm what you have below, or switch to All Ideas.':'No suitable idea for this choice. Try another choice above.')+(RK.skipped.missing?' '+RK.skipped.missing+' idea'+(RK.skipped.missing===1?' needs':'s need')+' nutrition values (for example rice or collagen protein) before they can be suggested.':'')+'</div>';}
+  else h+='<div class="sf-list" id="sf-list">'+show.map(function(x){return ideaCardHTML(x,R,scope);}).join('')+'</div>';
+  if(RK.list.length>show.length)h+='<button type="button" class="btn-line" data-sf-more>More ideas</button>';
+  else if(show.length)h+='<p class="muted small">That\'s all the ideas for this choice.</p>';
+  h+='<button type="button" class="btn-line" data-act="close">No thanks, I\'m satisfied</button>';
+  h+='<p class="muted small">Ideas only. Nothing here is added to your diary. To eat something, log it as usual.</p>';
+  /* my kitchen */
+  h+=kitchenHTML(s);
+  /* saved ideas */
+  var I=loadIdeas();
+  h+='<details class="fold" id="sf-saved"'+(s.openSaved?' open':'')+'><summary><span>Saved Food Ideas <span class="muted small" style="font-weight:500">· '+I.length+'</span></span></summary><div class="fold-b">'
+    +(I.length?I.slice().reverse().map(function(x){return '<div class="sf-saved"><p><b>'+esc(x.name)+'</b></p><p class="muted small">Saved '+esc(dShort(String(x.saved).slice(0,10)))+'</p><ul class="bi-recs">'+x.items.map(function(it){return '<li>'+esc(it.name)+' · '+esc(it.label)+'</li>';}).join('')+'</ul><p class="small">≈ '+fmtN(x.totals.kcal)+' kcal · P '+x.totals.p+' g · C '+x.totals.c+' g · F '+x.totals.f+' g</p><button type="button" class="linkbtn" data-sf-delidea="'+esc(x.id)+'" style="align-self:flex-start;min-height:36px">Delete</button></div>';}).join(''):'<p class="muted">No saved ideas yet. Tap “Save idea” on a suggestion.</p>')+'</div></details>';
+  /* excluded */
+  h+='<details class="fold"><summary><span>Not suggested <span class="muted small" style="font-weight:500">· '+P.excluded.length+'</span></span></summary><div class="fold-b"><p class="muted small">Foods you chose not to see. Foods matching a confirmed allergy, a diagnosed intolerance or “prefer to avoid” in your food profile are also never suggested.</p>'
+    +(P.excluded.length?P.excluded.map(function(k){return '<div class="nf-row"><span>'+esc(sfName(k))+'</span><button type="button" class="btn-line" data-sf-allow="'+esc(k)+'">Allow again</button></div>';}).join(''):'<p class="muted">None.</p>')+'</div></details>';
+  return h;
+}
+function ideaCardHTML(x,R,scope){
+  var idea=x.idea,T=x.T,av=kitchenAvail();
+  var h='<article class="sf-idea"><div class="sf-top"><b>'+esc(idea.name)+'</b>'+(idea.prep?'<span class="muted small">'+esc(idea.prep)+'</span>':'')+'</div>';
+  h+=idea.items.map(function(it,i){var d=sfIng(it[0]),q=x.qs[i];return '<div class="sf-ing"><span class="n">'+esc(sfName(it[0]))+(scope==="all"&&av[it[0]]!==true?' <span class="sg-tag">not in your kitchen</span>':'')+'<small>'+esc(qtyLabel(it[0],q))+(d.note?' · '+esc(d.note):'')+'</small></span><div class="sf-step"><button type="button" class="icon-btn" data-sf-q="'+idea.id+'|'+i+'|-1" aria-label="Less">−</button><button type="button" class="icon-btn" data-sf-q="'+idea.id+'|'+i+'|1" aria-label="More">+</button></div></div>';}).join('');
+  if(idea.how)h+='<p class="muted small">'+esc(idea.how)+'</p>';
+  h+='<p class="sf-nut" data-sf-nut="'+idea.id+'">≈ <b>'+fmtN(Math.round(T.kcal))+' kcal</b> · P '+g0(T.p)+' g · C '+g0(T.c)+' g · F '+g0(T.f)+' g</p>';
+  h+='<p class="small"><b>Why this fits:</b> '+esc(whyFits(T,R))+'</p>';
+  if(R.ok)h+='<p class="sf-prev">If you eat this: <b>'+leftTxt(R.k-Math.round(T.kcal),"kcal")+'</b> · '+leftTxt(R.c-Math.round(T.c),"g carbs")+'</p>';
+  T.caution.forEach(function(c){h+='<p class="bi-caution small">'+esc(c)+'</p>';});
+  h+='<div class="sf-acts"><button type="button" class="btn-line" data-sf-save="'+idea.id+'">Save idea</button>'+(idea.items.length?'<button type="button" class="linkbtn" data-sf-hide="'+esc(idea.items[0][0])+'" style="min-height:36px;font-size:14px">Don\'t suggest '+esc(sfName(idea.items[0][0]).toLowerCase())+'</button>':'')+'</div>';
+  h+='<p class="muted small">Estimates from the food list'+(idea.items.some(function(it){var f=sfFood(it[0]);return f&&f.source;})?' and USDA':'')+'. Not logged.</p>';
+  return h+'</article>';
+}
+function kitchenHTML(s){
+  var K_=loadKitchen(),q=String(s.kq||""),qn=norm(q),items=K_.items.filter(function(x){return !qn||norm(x.name).indexOf(qn)>=0;});
+  var h='<details class="fold" id="sf-kitchen"'+(s.openKitchen?' open':'')+'><summary><span>My Kitchen <span class="muted small" style="font-weight:500">· '+K_.items.filter(function(x){return x.available===true;}).length+' available</span></span></summary><div class="fold-b">';
+  h+='<p class="muted small">Mark what you usually have at home. Nothing is assumed: starter items stay “not confirmed” until you choose.</p>';
+  h+='<label class="search">'+ICON.search+'<input id="sf-kq" type="search" placeholder="Search or add an ingredient" value="'+esc(q)+'" autocomplete="off" aria-label="Search or add an ingredient"></label>';
+  if(q.trim()){
+    var rs=searchResults(q).filter(function(r){return r.kind==='db'||r.kind==='custom';}).slice(0,4);
+    h+='<div class="sf-add">'+rs.map(function(r){return '<button type="button" class="row" data-sf-addfood="'+esc(r.kind+'|'+(r.key||r.id))+'"><span class="n">+ Add '+esc(r.name)+'<small>with values from '+(r.kind==="db"?'the food list':'your foods')+'</small></span></button>';}).join('')
+      +'<button type="button" class="row" data-sf-addtext><span class="n">+ Add “'+esc(q.trim())+'”<small>without nutrition values (not used in ideas until linked)</small></span></button></div>';
+  }
+  h+=items.map(function(x){var f=sfFood(x.id),vals=f&&f.per100&&f.per100.kcal!=null;
+    return '<div class="sf-kit"><div class="sf-kit-top"><span class="n">'+esc(x.name)+'<small>'+(vals?'Values: '+esc(f.name)+(f.source?' ('+esc(f.source)+')':''):'No nutrition values')+'</small></span><button type="button" class="linkbtn" data-sf-del="'+esc(x.id)+'" style="min-height:36px;font-size:14px">Delete</button></div>'
+      +'<div class="seg sf-av"><button type="button" class="'+(x.available===true?'on':'')+'" data-sf-av="'+esc(x.id)+'|1" aria-pressed="'+(x.available===true)+'">Available</button><button type="button" class="'+(x.available===false?'on':'')+'" data-sf-av="'+esc(x.id)+'|0" aria-pressed="'+(x.available===false)+'">Not now</button></div>'
+      +(x.available==null?'<p class="muted small">Not confirmed</p>':'')
+      +(!vals?linkPickerHTML(x):'')+'</div>';}).join('')||'<p class="muted">No matching ingredients.</p>';
+  return h+'</div></details>';
+}
+function linkPickerHTML(x){
+  var own=DB.get(K.custom,[]);
+  if(!own.length)return '<p class="muted small">To use it in ideas, add it in Foods → “Add your own food” from the label, then link it here.</p>';
+  return '<div><p class="muted small" style="margin-bottom:4px">Link to one of your foods:</p><div class="chips">'+own.slice(-6).map(function(c){return '<button type="button" class="chip" data-sf-link="'+esc(x.id+'|'+c.id)+'">'+esc(shortName(c.name))+'</button>';}).join('')+'</div></div>';
+}
+/* ----- events (none of these touch the diary) ----- */
+function sfRender(){if(APP.sheet&&APP.sheet.view==="smartfuel")renderSheet();}
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("button");if(!t)return;var s=APP.sheet,sf=s&&s.view==="smartfuel";
+  if(t.hasAttribute("data-sf-toggle")){setUi({sfOpen:ui().sfOpen===false});render();return;}
+  if(t.hasAttribute("data-sf-open")){APP.sf={day:todayISO(),qty:{}};openSheet({view:"smartfuel",page:1});return;}
+  if(!sf)return;
+  if(t.hasAttribute("data-sf-day")){var d=parseISO(sfDay());d.setDate(d.getDate()+(+t.getAttribute("data-sf-day")));var ni=isoOf(d);if(ni<=todayISO()){APP.sf.day=ni;s.page=1;sfRender();}return;}
+  if(t.hasAttribute("data-sf-cat")){s.cat=t.getAttribute("data-sf-cat");s.page=1;var p=sfPrefs();p.cat=s.cat;saveSfPrefs(p);sfRender();return;}
+  if(t.hasAttribute("data-sf-scope")){s.scope=t.getAttribute("data-sf-scope");s.page=1;var p2=sfPrefs();p2.scope=s.scope;saveSfPrefs(p2);sfRender();return;}
+  if(t.hasAttribute("data-sf-more")){s.page=(s.page||1)+1;sfRender();return;}
+  if(t.hasAttribute("data-sf-q")){var a=t.getAttribute("data-sf-q").split("|"),id=a[0],i=+a[1],dir=+a[2],idea=sfCandidates().filter(function(x){return x.id===id;})[0];if(!idea)return;
+    var key=idea.items[i][0],d2=sfIng(key),qs=ideaQty(idea),step=d2.unit?1:(d2.step||10),nv=Math.max(d2.unit?1:step,qs[i]+dir*step);
+    APP.sf.qty=APP.sf.qty||{};APP.sf.qty[id]=APP.sf.qty[id]||{};APP.sf.qty[id][i]=nv;sfRender();return;}
+  if(t.hasAttribute("data-sf-save")){var sid=t.getAttribute("data-sf-save"),x=(APP.sfShown||[]).filter(function(z){return z.idea.id===sid;})[0];if(!x)return;
+    var I=loadIdeas(),rec={id:uid(),ideaId:sid,name:x.idea.name,items:x.idea.items.map(function(it,j){return {key:it[0],name:sfName(it[0]),qty:x.qs[j],label:qtyLabel(it[0],x.qs[j])};}),totals:{kcal:Math.round(x.T.kcal),p:Math.round(x.T.p),c:Math.round(x.T.c),f:Math.round(x.T.f)},saved:new Date().toISOString(),day:sfDay()};
+    I.push(rec);DB.set(K.ideas,I);sfRender();toast("Idea saved (not logged)");return;}
+  if(t.hasAttribute("data-sf-delidea")){var di=t.getAttribute("data-sf-delidea"),I2=loadIdeas(),gone=I2.filter(function(z){return z.id===di;})[0];DB.set(K.ideas,I2.filter(function(z){return z.id!==di;}));s.openSaved=true;sfRender();toast("Idea deleted",function(){var I3=loadIdeas();I3.push(gone);DB.set(K.ideas,I3);sfRender();});return;}
+  if(t.hasAttribute("data-sf-hide")){var hk=t.getAttribute("data-sf-hide"),p3=sfPrefs();if(p3.excluded.indexOf(hk)<0)p3.excluded.push(hk);saveSfPrefs(p3);sfRender();toast(sfName(hk)+" won't be suggested",function(){var p4=sfPrefs();p4.excluded=p4.excluded.filter(function(z){return z!==hk;});saveSfPrefs(p4);sfRender();});return;}
+  if(t.hasAttribute("data-sf-allow")){var ak=t.getAttribute("data-sf-allow"),p5=sfPrefs();p5.excluded=p5.excluded.filter(function(z){return z!==ak;});saveSfPrefs(p5);sfRender();return;}
+  if(t.hasAttribute("data-sf-av")){var av=t.getAttribute("data-sf-av").split("|"),Kt=loadKitchen();Kt.items.forEach(function(z){if(z.id===av[0])z.available=av[1]==="1"?(z.available===true?null:true):(z.available===false?null:false);});saveKitchen(Kt);s.openKitchen=true;s.page=1;sfRender();return;}
+  if(t.hasAttribute("data-sf-del")){var dk=t.getAttribute("data-sf-del"),K2=loadKitchen(),gi=K2.items.filter(function(z){return z.id===dk;})[0];K2.items=K2.items.filter(function(z){return z.id!==dk;});saveKitchen(K2);s.openKitchen=true;sfRender();toast(gi.name+" deleted",function(){var K3=loadKitchen();K3.items.push(gi);saveKitchen(K3);sfRender();});return;}
+  if(t.hasAttribute("data-sf-addtext")){var nm=String(s.kq||"").trim();if(!nm)return;var K4=loadKitchen();K4.items.push({id:"k_"+uid(),name:nm,available:true,link:null});saveKitchen(K4);s.kq="";s.openKitchen=true;sfRender();toast(nm+" added");return;}
+  if(t.hasAttribute("data-sf-addfood")){var af=t.getAttribute("data-sf-addfood").split("|"),K5=loadKitchen(),item;
+    if(af[0]==="db"){var dfd=dbFood(af[1]);item={id:"k_"+uid(),name:dfd.name,available:true,link:{kind:"db",ref:af[1],state:dfd.state},g:dfd.defQty||100,step:dfd.defQty>=100?25:10};}
+    else if(af[0]==="custom"){var cf=DB.get(K.custom,[]).filter(function(z){return z.id===af[1];})[0];if(!cf)return;item={id:"k_"+uid(),name:cf.name,available:true,link:{kind:"custom",ref:cf.id},g:100,step:10};}
+    else return;
+    K5.items.push(item);saveKitchen(K5);s.kq="";s.openKitchen=true;sfRender();toast(item.name+" added to My Kitchen");return;}
+  if(t.hasAttribute("data-sf-link")){var lk=t.getAttribute("data-sf-link").split("|"),K6=loadKitchen();K6.items.forEach(function(z){if(z.id===lk[0])z.link={kind:"custom",ref:lk[1]};});saveKitchen(K6);s.openKitchen=true;sfRender();toast("Linked");return;}
+  if(t.hasAttribute("data-sf-profile")){var P6=loadProfile();P6.cons.forEach(function(c){if((c.id==="gluten"||c.id==="soy"||c.id==="nuts")&&(!c.status||c.status==="noteval"))c.status="avoid";});P6.setup=true;saveProfile(P6);var p7=sfPrefs();p7.profileAsked=true;saveSfPrefs(p7);sfRender();toast("Food profile updated");return;}
+  if(t.hasAttribute("data-sf-profile-no")){var p8=sfPrefs();p8.profileAsked=true;saveSfPrefs(p8);sfRender();return;}
+});
+document.addEventListener("input",function(ev){var t=ev.target,s=APP.sheet;if(t.id==="sf-kq"&&s&&s.view==="smartfuel"){s.kq=t.value;s.openKitchen=true;renderSheet("#sf-kq");}});
+document.addEventListener("toggle",function(ev){var d=ev.target,s=APP.sheet;if(!s||s.view!=="smartfuel"||!d||!d.id)return;if(d.id==="sf-kitchen")s.openKitchen=d.open;if(d.id==="sf-saved")s.openSaved=d.open;},true);
+
 
 /* ============================== render ============================== */
 var TABS=[["today","Today",'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'],["foods","Foods",'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'],["signals","Signals",'<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>'],["me","Me",'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>']];
@@ -2439,6 +2724,7 @@ function renderSheet(focus){
   if(s.view==="log"){title="Log food or drink";body=slotsHTML(s.slot)+'<label class="search">'+ICON.search+'<input id="s-q" type="search" placeholder="Search food, drink or barcode" value="'+esc(s.q||"")+'" autocomplete="off" aria-label="Search food, drink or barcode"></label><div id="s-res" class="res">'+foodsListHTML(s.q,"s")+'</div>';}
   else if(s.view==="portion"){title=s.food.name;back=!!s.from;body=portionHTML(s);}
   else if(s.view==="manual"){title="Enter label values";back=!!s.from;body=manualHTML(s);}
+  else if(s.view==="smartfuel"){title="Smart Fuel";body=smartFuelSheetHTML(s);}
   else if(s.view==="phase"){title="My Nutrition Phase";body=phaseSheetHTML(s);}
   else if(s.view==="insights"){title="All insights";body=insightsSheetHTML();}
   else if(s.view==="morning"){title=s.d.id?"Edit morning check":"How do I feel today?";body=morningFormHTML(s);}
@@ -2607,7 +2893,7 @@ applyTheme();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 
