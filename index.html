@@ -175,6 +175,25 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .toast span{min-width:0}
 .toast button{border:0;background:transparent;color:var(--on-btn);font-weight:800;text-decoration:underline;min-height:40px;padding:0 8px}
 .toast.plain{padding-right:18px}
+/* date navigation */
+.day-nav{display:flex;align-items:center;gap:2px;min-width:0}
+.day-nav .head-date{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:center;padding:0 2px}
+.day-nav .cr-arrow{width:34px;height:40px;flex:none}
+.back-today{align-self:flex-start;border:0;background:var(--btn);color:var(--on-btn);border-radius:999px;min-height:40px;padding:0 16px;font-size:15px;font-weight:800;margin-top:-10px}
+.nl-day{font-size:24px;font-weight:800;margin:6px 0 2px}
+.day-clear{align-self:flex-start;font-size:14px;color:var(--muted);margin-top:6px}
+.day-notes .bi-recs{font-size:16px}
+.cal-head{display:flex;align-items:center;justify-content:space-between}
+.cal-head b{font-size:19px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;text-align:center}
+.cal-dow{font-size:13px;font-weight:700;color:var(--muted);padding:4px 0}
+.cal-d{position:relative;border:0;background:transparent;color:var(--ink);border-radius:12px;min-height:46px;font-size:17px;font-weight:600;padding:0}
+.cal-d.has{font-weight:800;background:var(--raise)}
+.cal-d i{position:absolute;left:50%;bottom:6px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--ok)}
+.cal-d.today{box-shadow:inset 0 0 0 1.5px var(--line-2)}
+.cal-d.sel{background:var(--btn);color:var(--on-btn)}.cal-d.sel i{background:var(--on-btn)}
+.cal-d:disabled{color:var(--muted);opacity:.4}
+.cal-key{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:4px}
 /* smart fuel */
 .sf-card{padding:0;gap:0}
 .sf-head b{font-size:20px}
@@ -1255,15 +1274,32 @@ function spoonHTML(s){
     h+='<div class="note"><label class="lbl" for="sp-g">1 level tablespoon of '+esc(food.name)+' weighs</label><div class="grid2"><div class="portion-amt"><input class="inp" id="sp-g" inputmode="decimal" value="'+(cur!==""?fmtN(cur):"")+'" style="width:100%;font-size:22px;min-height:52px"><span>g</span></div><button type="button" class="btn-main" data-act="spoon-save" style="min-height:52px;font-size:17px">Save</button></div><p class="muted small" style="margin-top:8px">Weigh one level tablespoon once, or copy it from the package. A teaspoon is a third of it.</p></div>';}
   return h;
 }
+/* ============================== SELECTED DATE ============================== */
+/* Today shows APP.day (the selected calendar date, local time). It starts on today each time the app opens.
+   Everything on Today (log, totals, creatine, edits) uses this date. Diary storage is unchanged: bflfood_diary[date]. */
+function selDay(){var t=todayISO();if(!APP.day||APP.day>t)APP.day=t;return APP.day;}
+function isSelToday(){return selDay()===todayISO();}
+function dayLabel(day){var t=todayISO(),y=parseISO(t);y.setDate(y.getDate()-1);var d=parseISO(day);return day===t?"Today":day===isoOf(y)?"Yesterday":d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",","");}
+function dayLong(day){var d=parseISO(day);return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",year:"numeric"}).replace(",","");}
+function goDay(day){var t=todayISO();APP.day=day>t?t:day;APP.dayConfirm=false;render();try{window.scrollTo(0,0);}catch(e){}}
+/* targets for a date: the target saved on that date if there is one; otherwise today's settings, labelled as an estimate */
+function targetsForDay(day,f){
+  var R=calcFuel(f,day);if(day===todayISO()){R.tsrc="current";return R;}
+  var h=targetFor(day),o=Object.assign({},R);
+  if(h){o.kcal=h.kcal;o.protein=h.p;o.carbs=h.c;o.fat=h.f;o.tsrc="saved";o.tlabel=h.label||"";o.phase=null;}
+  else{o.tsrc="estimate";o.phase=null;}
+  return o;
+}
 function addToDay(food,qty,slot,spoon){
-  var D=loadDiary(),day=todayISO();
-  var e={id:uid(),slot:slot,name:food.name+(food.brand?" ("+food.brand+")":""),items:[quickItem(food,qty)],factor:1,src:"quick",at:Date.now()};
+  var D=loadDiary(),day=selDay(),past=day!==todayISO();
+  var e={id:uid(),slot:slot,name:food.name+(food.brand?" ("+food.brand+")":""),items:[quickItem(food,qty)],factor:1,src:"quick",at:past?null:Date.now()};
+  if(past){e.loggedAt=Date.now();e.backfilled=true;}
   if(food.unit==="ml")e.drink=true;
   if(spoon)e.spoon=spoon;
   (D[day]=D[day]||[]).push(e);DB.set(K.diary,D);setUi({lastSlot:slot});return e;
 }
-function removeEntry(id){var D=loadDiary(),day=todayISO();D[day]=(D[day]||[]).filter(function(e){return e.id!==id;});DB.set(K.diary,D);if(!D[day].length&&(dayStatusAll()[day]||{}).complete)setComplete(day,false);}
-function findEntry(id){return (loadDiary()[todayISO()]||[]).filter(function(e){return e.id===id;})[0];}
+function removeEntry(id){var D=loadDiary(),day=selDay();D[day]=(D[day]||[]).filter(function(e){return e.id!==id;});DB.set(K.diary,D);if(!D[day].length&&(dayStatusAll()[day]||{}).complete)setComplete(day,false);}
+function findEntry(id){return (loadDiary()[selDay()]||[]).filter(function(e){return e.id===id;})[0];}
 function recentItems(){
   var D=loadDiary(),all=[];
   Object.keys(D).forEach(function(k){(D[k]||[]).forEach(function(e){if(e.items&&e.items.length===1)all.push(e);});});
@@ -1281,35 +1317,38 @@ K.creatine="bflfood_creatine";var CREATINE_G=6;
 function creatineAll(){var c=DB.get(K.creatine,{});return c&&typeof c==="object"&&!Array.isArray(c)?c:{};}
 function creatineTaken(day){return !!creatineAll()[day];}
 function setCreatine(day,on){var c=creatineAll();if(on)c[day]={g:CREATINE_G,at:Date.now()};else delete c[day];DB.set(K.creatine,c);}
-function crDay(){var t=todayISO();if(!APP.crDay||APP.crDay>t)APP.crDay=t;return APP.crDay;}
+function crDay(){return selDay();}
 function creatineHTML(){
   var day=crDay(),t=todayISO(),on=creatineTaken(day),isT=day===t,d=parseISO(day);
   var y=parseISO(t);y.setDate(y.getDate()-1);
   var lbl=isT?"Today":day===isoOf(y)?"Yesterday":d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",","");
   return '<div class="cr" id="creatine"><div class="cr-top"><div><p class="cr-t">Creatine</p><p class="cr-s">Daily dose · '+CREATINE_G+' g</p></div>'
-    +'<div class="cr-nav" role="group" aria-label="Choose date"><button type="button" class="cr-arrow" data-cr-step="-1" aria-label="Previous day"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="cr-day" id="cr-day">'+esc(lbl)+'</span><button type="button" class="cr-arrow" data-cr-step="1" aria-label="Next day"'+(isT?' disabled':'')+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></div></div>'
+    +'</div>'
     +'<label class="cr-check'+(on?' on':'')+'"><input type="checkbox" id="cr-check"'+(on?' checked':'')+'><span class="cr-box" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span>Taken '+(isT?'today':'this day')+'</span></label>'
     +(on?'<p class="cr-ok" role="status">'+CREATINE_G+' g logged for '+(isT?'today':esc(lbl==="Yesterday"?"yesterday":lbl))+'</p>':'')+'</div>';
 }
 
 /* ============================== TODAY ============================== */
 function budgetHTML(f,R,t,day){
-  var fl=dayFluid(day),h='<section class="card" id="budget" aria-label="Today\'s budget">';
-  if(R.kcal==null){
+  var fl=dayFluid(day),isT=day===todayISO(),h='<section class="card" id="budget" aria-label="Budget for '+esc(dayLabel(day))+'">';
+  if(!isT&&!t.entries){
+    h+='<p class="eyebrow">'+esc(dayLabel(day))+'</p><p class="nl-day" id="b-kcal">Nothing logged for this day.</p>'
+      +(R.kcal!=null?'<p class="muted">'+(R.tsrc==="saved"?'Target that day: ':'Target estimate (none saved for this day): ')+fmtN(R.kcal)+' kcal · P '+fmtN(R.protein)+' · C '+fmtN(R.carbs)+' · F '+fmtN(R.fat)+' g</p>':'');
+  } else if(R.kcal==null){
     h+='<p class="eyebrow">Today</p><p class="big" id="b-kcal">'+fmtK(t.kcal)+' kcal</p><p class="muted">eaten so far</p>'
       +'<p style="font-size:17px">Set up your plan and the Food Tracker shows what you have left each day.</p><button type="button" class="btn-main" data-act="go-plan">Set up my plan</button>';
   } else {
     var rem=R.kcal-t.kcal,over=rem<-0.5;
-    h+='<div><p class="eyebrow">'+(over?'Over today':'Left today')+'</p><p class="big'+(over?' over':'')+'" id="b-kcal">'+fmtK(Math.abs(rem))+' kcal</p><p class="muted" style="margin-top:4px">'+fmtK(t.kcal)+' eaten of '+fmtN(R.kcal)+' kcal</p>'+(phaseLabel(R)?'<p class="phase-line" id="b-phase">'+esc(phaseLabel(R))+'</p>':'')+(R.phase&&R.phase.invalid?'<p class="phase-line warn-t">Plan needs adjusting · see Me</p>':'')+'</div>';
+    h+='<div><p class="eyebrow">'+(over?'Over ':'Left ')+(isT?'today':'· '+esc(dayLabel(day)))+'</p><p class="big'+(over?' over':'')+'" id="b-kcal">'+fmtK(Math.abs(rem))+' kcal</p><p class="muted" style="margin-top:4px">'+fmtK(t.kcal)+' eaten of '+fmtN(R.kcal)+' kcal</p>'+(R.tsrc==="saved"?'<p class="phase-line" id="b-tsrc">Target saved for this day'+(R.tlabel?' · '+esc(R.tlabel):'')+'</p>':R.tsrc==="estimate"?'<p class="phase-line warn-t" id="b-tsrc">Target estimate: no target was saved for this day</p>':'')+(phaseLabel(R)?'<p class="phase-line" id="b-phase">'+esc(phaseLabel(R))+'</p>':'')+(R.phase&&R.phase.invalid?'<p class="phase-line warn-t">Plan needs adjusting · see Me</p>':'')+'</div>';
     h+=[["p","Protein",t.p,R.protein],["c","Carbohydrates",t.c,R.carbs],["f","Fat",t.f,R.fat]].map(function(m){
       if(m[3]==null)return "";var ov=m[2]>m[3]+0.5,pc=m[3]?Math.min(100,m[2]/m[3]*100):0;
       var eat=Math.round(m[2]),left=m[3]-eat;
       return '<div class="mrow" id="m-'+m[0]+'"><div class="mrow-top"><span class="n">'+m[1]+'</span><span class="v">'+fmtN(eat)+' <span>/ '+fmtN(m[3])+' g</span></span></div><div class="bar '+m[0]+'"><i style="width:'+pc.toFixed(1)+'%"'+(ov?' class="over"':'')+'></i></div><p class="mrow-left'+(left<0?' over':'')+'" id="m-'+m[0]+'-left">'+(left<0?fmtN(-left)+' g OVER':fmtN(left)+' g LEFT')+'</p></div>';
     }).join('');
   }
-  if(R.kcal!=null)h+=proteinMealsHTML(day,R);
-  if(R.phase&&R.phase.ok&&R.phase.mode!=="maintain"){var rf=reviewFlags();if(rf.length)h+='<p class="phase-line warn-t">'+rf.length+' thing'+(rf.length===1?'':'s')+' to review · Me → My Cutting Progress</p>';}
-  h+='<div class="fluids"><span>Fluids today</span><b id="b-fluid">'+fmtK(fl)+' ml</b></div>';
+  if(R.kcal!=null&&(isT||t.entries))h+=proteinMealsHTML(day,R);
+  if(isT&&R.phase&&R.phase.ok&&R.phase.mode!=="maintain"){var rf=reviewFlags();if(rf.length)h+='<p class="phase-line warn-t">'+rf.length+' thing'+(rf.length===1?'':'s')+' to review · Me → My Cutting Progress</p>';}
+  h+='<div class="fluids"><span>Fluids '+(isT?'today':'this day')+'</span><b id="b-fluid">'+fmtK(fl)+' ml</b></div>';
   h+=creatineHTML();
   if(t.missAny)h+='<p class="muted small" style="margin-top:-6px">Some items have no nutrition data, so real totals may be a little higher.</p>';
   return h+'</section>';
@@ -1319,8 +1358,8 @@ function againHTML(){
   return '<section aria-label="Log again"><p class="eyebrow" style="margin-bottom:10px">Again?</p><div class="chips">'+R_.map(function(r,i){return '<button type="button" class="chip" data-again="'+i+'">+ '+esc(shortName(r.food.name))+' '+(r.spoon?esc(r.spoon):fmtN(r.qty)+' '+r.food.unit)+'</button>';}).join('')+'</div></section>';
 }
 function logHTML(day){
-  var es=loadDiary()[day]||[],h='<section class="log" aria-label="Today\'s log"><p class="eyebrow">Today\'s log</p>';
-  if(!es.length)return h+'<p class="empty">Nothing logged yet today.</p></section>';
+  var isT=day===todayISO(),es=loadDiary()[day]||[],h='<section class="log" aria-label="Log for '+esc(dayLabel(day))+'"><p class="eyebrow">'+(isT?'Today\'s log':'Log · '+esc(dayLong(day)))+'</p>';
+  if(!es.length)return h+'<p class="empty">'+(isT?'Nothing logged yet today.':'Nothing logged for this day.')+'</p></section>';
   SLOTS.forEach(function(s){
     var se=es.filter(function(e){return e.slot===s;});if(!se.length)return;
     var sk=se.reduce(function(a,e){return a+entryTotals(e).kcal;},0);
@@ -1330,18 +1369,48 @@ function logHTML(day){
       var amt=single?fmtN(r1(it.qty*(e.factor||1)))+" "+it.unit:e.items.length+" ingredients";if(single&&e.spoon)amt=e.spoon+" · "+amt;
       var worst=e.items.map(function(i){return checkFood(i).worst;}).filter(function(l){return l==="allergy";}).length;
       var unknown=x.miss&&x.miss.kcal&&!x.kcal;
+      if(single&&e.items[0].per100&&!unknown)amt+=" · P "+fmtN(Math.round(x.p))+" · C "+fmtN(Math.round(x.c))+" · F "+fmtN(Math.round(x.f))+" g";
       return '<button type="button" class="row" data-edit="'+e.id+'">'+(worst?'<span class="warn-dot" title="Contains a confirmed allergen"></span>':'')+'<span class="n">'+esc(e.name)+'<small>'+esc(amt)+'</small></span><span class="k'+(unknown?' mute':'')+'">'+(unknown?'–':fmtK(x.kcal))+'</span></button>';
     }).join('');
   });
+  h+=APP.dayConfirm?'<div class="note warn" style="margin-top:12px">Delete all '+es.length+' entr'+(es.length===1?'y':'ies')+' for '+esc(dayLong(day))+'? Creatine, notes and check-ins are kept.<div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn-danger" data-day-clear-yes>Delete all</button><button type="button" class="btn-line" data-day-clear-no>Keep</button></div></div>'
+    :'<button type="button" class="linkbtn day-clear" data-day-clear>Delete all entries for this day</button>';
   return h+'</section>';
 }
+/* notes and check-ins saved for the selected date (read-only summary) */
+function dayNotesHTML(day){
+  var L=[];
+  loadMornings().filter(function(m){return String(m.at).slice(0,10)===day;}).forEach(function(m){L.push("Morning check "+String(m.at).slice(11,16).replace(":",".")+": "+(mcSymTxt(m)||"no symptoms chosen")+(m.sleep?" · sleep "+m.sleep:""));});
+  var c=dayCtx(day),bits=[];if(c.act.length)bits.push(c.act.map(function(a){return (BI_ACTS.filter(function(x){return x[0]===a;})[0]||[a,a])[1].toLowerCase();}).join(", "));
+  ["energy","hunger","recovery","performance","sleep"].forEach(function(k){if(c[k]!=null)bits.push(k+" "+c[k]);});if(c.cycleSym.length)bits.push(c.cycleSym.join(", ").toLowerCase());
+  if(bits.length)L.push("Check-in: "+bits.join(" · "));
+  loadSignals().filter(function(s){return String(s.at).slice(0,10)===day;}).forEach(function(s){L.push("Food Detective: "+(s.what||"entry")+(sgRealSym(s).length?" · "+sgRealSym(s).join(", "):""));});
+  loadNotes().filter(function(n){return isoOf(new Date(n.at))===day;}).forEach(function(n){L.push("Note: "+(n.text.length>90?n.text.slice(0,89)+"…":n.text));});
+  loadProg().filter(function(e){return e.date===day&&e.weight!=null;}).forEach(function(e){L.push("Weight: "+fmtN(e.weight)+" kg");});
+  if(!L.length)return "";
+  return '<section class="stack day-notes" aria-label="Notes and check-ins"><p class="eyebrow">Notes &amp; check-ins</p><ul class="bi-recs">'+L.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></section>';
+}
+function calendarHTML(){
+  var m=APP.calMonth||todayISO().slice(0,7),first=parseISO(m+"-01"),D=loadDiary(),t=todayISO(),sel=selDay(),C=creatineAll();
+  var title=first.toLocaleDateString("en-GB",{month:"long",year:"numeric"}),lead=(first.getDay()+6)%7,days=new Date(first.getFullYear(),first.getMonth()+1,0).getDate();
+  var h='<div class="cal-head"><button type="button" class="cr-arrow" data-cal-month="-1" aria-label="Previous month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><b id="cal-title">'+esc(title)+'</b><button type="button" class="cr-arrow" data-cal-month="1" aria-label="Next month"'+(m>=t.slice(0,7)?' disabled':'')+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></div>';
+  h+='<div class="cal-grid">'+["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(function(d){return '<span class="cal-dow">'+d+'</span>';}).join('');
+  for(var i=0;i<lead;i++)h+='<span></span>';
+  for(var d=1;d<=days;d++){var iso=m+"-"+String(d).padStart(2,"0"),has=(D[iso]||[]).length>0,fut=iso>t;
+    h+='<button type="button" class="cal-d'+(has?' has':'')+(iso===sel?' sel':'')+(iso===t?' today':'')+'" '+(fut?'disabled':'data-cal-day="'+iso+'"')+' aria-label="'+esc(dayLong(iso))+(has?', food logged':', nothing logged')+'">'+d+(has?'<i></i>':'')+'</button>';}
+  h+='</div><p class="muted small"><span class="cal-key"></span> Food logged. Days without a dot have nothing logged and aren\'t counted as zero.</p>';
+  h+='<button type="button" class="btn-line" data-cal-day="'+t+'">Go to today</button>';
+  return h;
+}
 function viewToday(){
-  var day=todayISO(),f=loadFuel(),R=calcFuel(f),t=dayTotals(day);recordTarget(day,R);
+  var day=selDay(),isT=day===todayISO(),f=loadFuel(),R=targetsForDay(day,f),t=dayTotals(day);if(isT)recordTarget(day,R);
   var pillTxt=R.phase&&R.phase.ok?R.phase.name:(R.kcal!=null?STRAT_PILL[f.strategy]:"Nutrition phase");
-  return '<header class="head"><span class="head-date">Today · '+esc(dateShort())+'</span><button type="button" class="pill pill-btn" data-open-phase aria-label="My Nutrition Phase: '+esc(pillTxt)+'">'+esc(pillTxt)+'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></header>'
+  var nav='<div class="day-nav"><button type="button" class="cr-arrow" data-day-step="-1" aria-label="Previous day"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="head-date" id="day-label">'+(isT?'Today · '+esc(parseISO(day).toLocaleDateString("en-GB",{day:"numeric",month:"short"})):dayLabel(day)==="Yesterday"?'Yesterday':esc(parseISO(day).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",","")))+'</span><button type="button" class="cr-arrow" data-day-step="1" aria-label="Next day"'+(isT?' disabled':'')+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button><button type="button" class="cr-arrow" data-day-cal aria-label="Choose a date"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></button></div>';
+  return '<header class="head">'+nav+'<button type="button" class="pill pill-btn" data-open-phase aria-label="My Nutrition Phase: '+esc(pillTxt)+'">'+esc(pillTxt)+'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></header>'
+    +(isT?'':'<button type="button" class="back-today" data-day-today>‹ Back to today</button>')
     +budgetHTML(f,R,t,day)+smartFuelCardHTML()
-    +'<button type="button" class="btn-main" data-act="log">'+ICON.plus+'Log food or drink</button>'
-    +againHTML()+logHTML(day)+completeTodayHTML(day)+biCardHTML();
+    +'<button type="button" class="btn-main" data-act="log">'+ICON.plus+(isT?'Log food or drink':'Add to '+esc(dayLabel(day)))+'</button>'
+    +againHTML()+logHTML(day)+completeTodayHTML(day)+dayNotesHTML(day)+biCardHTML();
 }
 
 /* ============================== FOODS ============================== */
@@ -1651,7 +1720,7 @@ document.addEventListener("click",function(ev){
   var a=t.getAttribute("data-sga");if(!a)return;
   switch(a){
     case "new":openSignal(sgBlank());break;
-    case "from-entry":var fe=findEntry(t.getAttribute("data-id"));if(fe)openSignal(signalFromEntry(fe,todayISO()));break;
+    case "from-entry":var fe=findEntry(t.getAttribute("data-id"));if(fe)openSignal(signalFromEntry(fe,selDay()));break;
     case "edit":var r=loadSignals().filter(function(x){return x.id===t.getAttribute("data-id");})[0];if(r){var dd=sgBlank();Object.keys(r).forEach(function(k){dd[k]=clone(r[k]);});openSignal(dd);}break;
     case "add-sym":case "add-why":var g=a==="add-sym"?"sym":"why",key=g+"Add",v=String(s[key]||"").trim();if(!v)break;if(s.d[g].indexOf(v)<0)s.d[g].push(v);if(g==="sym"){var ni=s.d.sym.indexOf("None noticed");if(ni>=0)s.d.sym.splice(ni,1);}s[key]="";renderSheet();break;
     case "sym-more":s.symMore=true;renderSheet();break;
@@ -2139,8 +2208,9 @@ function biCardHTML(){
 }
 function completeTodayHTML(day){
   if(!(loadDiary()[day]||[]).length)return "";
-  return isComplete(day)?'<p class="bi-done">✓ Today is marked complete <button type="button" class="linkbtn" data-bi-uncomplete="'+day+'" style="min-height:0;padding:0 4px;font-size:15px">Undo</button></p>'
-    :'<button type="button" class="linkbtn bi-mark" data-bi-complete="'+day+'">Mark today complete</button>';
+  var isT=day===todayISO();
+  return isComplete(day)?'<p class="bi-done">✓ '+(isT?'Today is':'This day is')+' marked complete <button type="button" class="linkbtn" data-bi-uncomplete="'+day+'" style="min-height:0;padding:0 4px;font-size:15px">Undo</button></p>'
+    :'<button type="button" class="linkbtn bi-mark" data-bi-complete="'+day+'">Mark '+(isT?'today':'this day')+' complete</button>';
 }
 function insightsSheetHTML(){
   var H=DB.get(K.insights,{items:[]}),I=(H&&H.items||[]).slice().reverse();
@@ -2672,7 +2742,7 @@ function sfRender(){if(APP.sheet&&APP.sheet.view==="smartfuel")renderSheet();}
 document.addEventListener("click",function(ev){
   var t=ev.target.closest("button");if(!t)return;var s=APP.sheet,sf=s&&s.view==="smartfuel";
   if(t.hasAttribute("data-sf-toggle")){setUi({sfOpen:ui().sfOpen===false});render();return;}
-  if(t.hasAttribute("data-sf-open")){APP.sf={day:todayISO(),qty:{}};openSheet({view:"smartfuel",page:1});return;}
+  if(t.hasAttribute("data-sf-open")){APP.sf={day:selDay(),qty:{}};openSheet({view:"smartfuel",page:1});return;}
   if(!sf)return;
   if(t.hasAttribute("data-sf-day")){var d=parseISO(sfDay());d.setDate(d.getDate()+(+t.getAttribute("data-sf-day")));var ni=isoOf(d);if(ni<=todayISO()){APP.sf.day=ni;s.page=1;sfRender();}return;}
   if(t.hasAttribute("data-sf-cat")){s.cat=t.getAttribute("data-sf-cat");s.page=1;var p=sfPrefs();p.cat=s.cat;saveSfPrefs(p);sfRender();return;}
@@ -2724,6 +2794,7 @@ function renderSheet(focus){
   if(s.view==="log"){title="Log food or drink";body=slotsHTML(s.slot)+'<label class="search">'+ICON.search+'<input id="s-q" type="search" placeholder="Search food, drink or barcode" value="'+esc(s.q||"")+'" autocomplete="off" aria-label="Search food, drink or barcode"></label><div id="s-res" class="res">'+foodsListHTML(s.q,"s")+'</div>';}
   else if(s.view==="portion"){title=s.food.name;back=!!s.from;body=portionHTML(s);}
   else if(s.view==="manual"){title="Enter label values";back=!!s.from;body=manualHTML(s);}
+  else if(s.view==="calendar"){title="Choose a date";body=calendarHTML();}
   else if(s.view==="smartfuel"){title="Smart Fuel";body=smartFuelSheetHTML(s);}
   else if(s.view==="phase"){title="My Nutrition Phase";body=phaseSheetHTML(s);}
   else if(s.view==="insights"){title="All insights";body=insightsSheetHTML();}
@@ -2811,7 +2882,15 @@ document.addEventListener("click",function(ev){
   var t=ev.target.closest("button,[data-act]");if(!t)return;
   var a=t.getAttribute("data-act"),s=APP.sheet;
   if(t.hasAttribute("data-tab")){go(t.getAttribute("data-tab"));return;}
-  if(t.hasAttribute("data-cr-step")){var cd=parseISO(crDay());cd.setDate(cd.getDate()+(+t.getAttribute("data-cr-step")));var ni=isoOf(cd);if(ni<=todayISO()){APP.crDay=ni;render();}return;}
+  if(t.hasAttribute("data-day-step")){var cd=parseISO(selDay());cd.setDate(cd.getDate()+(+t.getAttribute("data-day-step")));goDay(isoOf(cd));return;}
+  if(t.hasAttribute("data-day-today")){goDay(todayISO());return;}
+  if(t.hasAttribute("data-day-cal")){var sd=selDay();APP.calMonth=sd.slice(0,7);openSheet({view:"calendar"});return;}
+  if(t.hasAttribute("data-cal-month")){var cm=parseISO(APP.calMonth+"-01");cm.setMonth(cm.getMonth()+(+t.getAttribute("data-cal-month")));APP.calMonth=isoOf(cm).slice(0,7);renderSheet();return;}
+  if(t.hasAttribute("data-cal-day")){closeSheet();APP.tab="today";goDay(t.getAttribute("data-cal-day"));return;}
+  if(t.hasAttribute("data-day-clear")){APP.dayConfirm=true;render();return;}
+  if(t.hasAttribute("data-day-clear-no")){APP.dayConfirm=false;render();return;}
+  if(t.hasAttribute("data-day-clear-yes")){var cday=selDay(),DD=loadDiary(),goneDay=DD[cday]||[];delete DD[cday];DB.set(K.diary,DD);if((dayStatusAll()[cday]||{}).complete)setComplete(cday,false);APP.dayConfirm=false;render();
+    toast("All entries for "+dayLabel(cday).toLowerCase().replace(/^(mon|tue|wed|thu|fri|sat|sun)/,function(x){return x.charAt(0).toUpperCase()+x.slice(1);})+" deleted",function(){var D3=loadDiary();D3[cday]=(D3[cday]||[]).concat(goneDay);DB.set(K.diary,D3);render();toast("Restored");});return;}
   if(t.hasAttribute("data-theme-set")){setUi({theme:t.getAttribute("data-theme-set")});applyTheme();render();return;}
   if(t.hasAttribute("data-strat")){var f=loadFuel(),ns=t.getAttribute("data-strat");if(f.strategy!==ns){f.strategy=ns;f.strategyStart=todayISO();saveFuel(f);}render();toast("Goal: "+STRAT_PILL[ns]);return;}
   if(t.hasAttribute("data-again")){var r=(APP.again||[])[+t.getAttribute("data-again")];if(r){var sl=slotForType("auto"),e=addToDay(r.food,r.qty,sl,r.spoon);render();toast("Added to "+sl,function(){removeEntry(e.id);render();toast("Removed");});}return;}
@@ -2837,7 +2916,7 @@ document.addEventListener("click",function(ev){
     case "add":case "add-force":
       if(!s||s.view!=="portion")break;
       if(s.qty==null||!(s.qty>0)){$("#p-err").innerHTML='<div class="note warn">Enter an amount above 0.</div>';break;}
-      if(a!=="add-force"&&isDuplicate(todayISO(),s.slot,s.food,s.qty)){$("#p-err").innerHTML='<div class="note warn">You added this a moment ago. Add it again?<br><button type="button" class="btn" data-act="add-force">Yes, add again</button></div>';break;}
+      if(a!=="add-force"&&isDuplicate(selDay(),s.slot,s.food,s.qty)){$("#p-err").innerHTML='<div class="note warn">You added this a moment ago. Add it again?<br><button type="button" class="btn" data-act="add-force">Yes, add again</button></div>';break;}
       var added=addToDay(s.food,s.qty,s.slot,s.spoon),sl2=s.slot;closeSheet();if(APP.tab!=="today")APP.tab="today";render();
       toast("Added to "+sl2,function(){removeEntry(added.id);render();toast("Removed");});break;
     case "fav":if(s&&s.food){var arr=DB.get(K.favs,[]),id=favId(s.food),i=-1;arr.forEach(function(x,j){if(x.favId===id)i=j;});if(i>=0)arr.splice(i,1);else{var cf=clone(s.food);cf.favId=id;arr.push(cf);}DB.set(K.favs,arr);renderSheet();toast(i>=0?"Removed from favourites":"Added to favourites");}break;
@@ -2851,7 +2930,7 @@ document.addEventListener("click",function(ev){
       var cust=DB.get(K.custom,[]),rec={id:uid(),name:nm,brand:"",unit:s.unit||"g",per100:per,ingredients:"",allergenText:"",allergens:[],traces:[]};cust.push(rec);DB.set(K.custom,cust);
       var fd=clone(rec);fd.src="custom";fd.ref=rec.id;fd.presets=[];openSheet({view:"portion",food:fd,qty:rec.unit==="ml"?250:100,slot:s.slot||lastSlot(),from:null});toast("Saved to your foods");break;
     case "edit-save":
-      var E=findEntry(s.id);if(!E)break;var D=loadDiary(),day=todayISO(),ent=(D[day]||[]).filter(function(x){return x.id===s.id;})[0],bad=false;
+      var E=findEntry(s.id);if(!E)break;var D=loadDiary(),day=selDay(),ent=(D[day]||[]).filter(function(x){return x.id===s.id;})[0],bad=false;
       ent.items.forEach(function(it,j){var v=num(($("#e-q-"+j)||{}).value);if(v==null||v<0)bad=true;else{var nq=v/(ent.factor||1);if(Math.abs(nq-it.qty)>1e-9)delete ent.spoon;it.qty=nq;}});
       if(bad){toast("Enter amounts of 0 or more");break;}
       ent.slot=s.slot||ent.slot;DB.set(K.diary,D);closeSheet();render();toast("Saved");break;
@@ -2862,7 +2941,7 @@ document.addEventListener("click",function(ev){
     case "note-del-yes":var ND=loadNotes(),gn=ND.filter(function(x){return x.id===s.id;})[0];DB.set(K.notes,ND.filter(function(x){return x.id!==s.id;}));closeSheet();render();toast("Note deleted",function(){var NR=loadNotes();NR.push(gn);DB.set(K.notes,NR);render();toast("Restored");});break;
     case "edit-del":s.confirm=true;renderSheet();break;
     case "edit-del-no":s.confirm=false;renderSheet();break;
-    case "edit-del-yes":var gone=findEntry(s.id);removeEntry(s.id);closeSheet();render();toast("Deleted",function(){var D2=loadDiary(),d2=todayISO();(D2[d2]=D2[d2]||[]).push(gone);DB.set(K.diary,D2);render();toast("Restored");});break;
+    case "edit-del-yes":var gone=findEntry(s.id),gday=selDay();removeEntry(s.id);closeSheet();render();toast("Deleted",function(){var D2=loadDiary(),d2=gday;(D2[d2]=D2[d2]||[]).push(gone);DB.set(K.diary,D2);render();toast("Restored");});break;
     case "save-meas":
       var rm=readMeas();if(rm.err.length){$("#ms-err").innerHTML='<div class="note warn">'+rm.err.map(esc).join("<br>")+'</div>';break;}
       var f2=loadFuel();f2.meas=rm.m;f2.measSaved=todayISO();f2.migrated=false;saveFuel(f2);var oo=ui().open||{};oo["me-meas"]=false;setUi({open:oo});render();toast("Plan calculated");break;
@@ -2893,7 +2972,7 @@ applyTheme();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 
