@@ -20,8 +20,14 @@
 - Today's log is grouped by breakfast, lunch, dinner and snacks.
 - Drinks count towards your fluids for the day.
 
+**Quick Estimate**
+- Describe a meal in your own words, in English or Danish, for example "2 slices homemade white bread, 1 tsp butter on each and 1 slice cheese on each".
+- The app splits it into foods and amounts, shows every assumption (like "1 slice = 42 g") and where each value comes from.
+- You can change amounts, swap or remove foods, and add more before anything is saved.
+- It saves one normal entry in your log, so Today, Smart Fuel and Body Intelligence all include it.
+
 **Foods**
-- Search a built-in food list in English or Danish.
+- Search one food list in English or Danish. Every food shows its source.
 - Look up a product by its barcode number through Open Food Facts.
 - Add your own foods from the values on a label.
 - Mark foods as favourites.
@@ -104,10 +110,20 @@ Upload the new `index.html` to the same repository; GitHub replaces the old one.
 
 ## Sources
 
-- The built-in food list comes from Body Fuel Lab. The app never guesses missing values: if a value is unknown, it shows "n/a".
-- Black coffee uses USDA FoodData Central, FDC 171890 (about 1 kcal per 100 ml).
-- Spoon weights come from USDA FoodData Central standard portions.
-- Barcode data comes from [Open Food Facts](https://world.openfoodfacts.org) (ODbL licence).
+All foods are in one list, and each food is labelled with where its values come from:
+
+| Label | Source | Used for |
+|---|---|---|
+| **Frida (DTU)** | Frida food data, DTU National Food Institute | Preferred for Danish foods. None added yet. The app has **no live connection** to Frida. |
+| **USDA** | USDA FoodData Central, SR Legacy (cited by NDB number) | 58 foods added in October 2026 (breads, rugbrød, butter, cheese, milk, potatoes, meat, fish, vegetables, porridge, gravy and more), plus eggs and black coffee. |
+| **Unverified** | Source not recorded | The original 39 foods from Body Fuel Lab. Their values are unchanged. |
+| **Open Food Facts** | [Open Food Facts](https://world.openfoodfacts.org) (ODbL licence) | Barcode lookups. |
+| **Your food** | The label you copied | Foods you add yourself. |
+
+- When a USDA food stands in for a Danish one (rugbrød, leverpostej, brun sovs, frikadeller, Danish cheese), the app says so.
+- Household weights (a slice of bread, a teaspoon of butter) come from USDA where USDA lists them. Where it doesn't (for example a cheese-slicer slice), the app marks the weight as an estimate.
+- The app never guesses missing values: if a value is unknown, it shows "n/a".
+- Entries you have already logged keep the values they were logged with.
 
 ---
 

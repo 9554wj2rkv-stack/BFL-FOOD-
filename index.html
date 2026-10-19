@@ -16,6 +16,8 @@
   Three tabs: Today, Foods, Me. Data keys (bflfood_*) are the same as version 1, so logged food,
   your plan, food profile, favourites, own foods and weight check-ins carry over.
   The engine (calculations, food list, barcode lookup, safety checks) is copied unchanged.
+  Oct 2026: one unified food catalogue with a source on every food (Frida preferred, USDA FoodData Central
+  as fallback, original Body Fuel Lab foods marked "Unverified"), plus Quick Estimate. No live Frida connection.
 -->
 <style>
 /* Layout 4: one calm column — a budget card, one big log button, repeat chips, today's log. */
@@ -224,6 +226,19 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .sf-av button{min-height:40px;font-size:15px}
 .sf-saved{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:4px}
 /* evidence */
+.qe-text{min-height:96px;font-size:18px;line-height:1.4;resize:vertical;font-family:inherit}
+.qe-row .n{font-weight:800}
+.qe-item .sf-top b{font-size:18px}
+.qe-k{font-size:18px;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums}
+.qe-amt input{width:120px;font-size:24px;min-height:52px}
+.qe-notes{margin:0;padding-left:20px;font-size:15px;color:var(--ink-2);display:flex;flex-direction:column;gap:4px}
+.src-line{line-height:1.45}
+.src-line .ev-tag{vertical-align:1px}
+.qe-after{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:18px;padding:14px 14px 10px}
+.qe-tab{width:100%;border-collapse:collapse;font-size:16px;font-variant-numeric:tabular-nums}
+.qe-tab th,.qe-tab td{text-align:right;padding:6px 4px;border-top:1px solid var(--line);color:var(--ink)}
+.qe-tab thead th{border-top:0;font-size:13px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.qe-tab tbody th{text-align:left;font-weight:700}
 .ev-tag{display:inline-block;font-size:13px;font-weight:800;padding:2px 9px;border-radius:999px;margin:0 6px 4px 0;background:var(--card);color:var(--ink);border:1.5px solid currentColor}
 .ev-strong{background:var(--raise);color:var(--ok)}
 .ev-emerging{background:var(--warn-bg);color:var(--warn)}
@@ -876,8 +891,12 @@ function sumItems(items){
 var FOODDB=SC.FOODDB,byKey=SC.byKey,stateLabel=SC.stateLabel;
 function dbFood(key,st){
   var d=byKey[key];if(!d)return null;var states=Object.keys(d.s);if(!st||!d.s[st])st=states[0];var v=d.s[st];
-  return {src:"db",ref:key,name:d.name,state:st,states:states,unit:"g",per100:{kcal:v[0],p:v[1],c:v[2],f:v[3],fib:v[4]},cat:d.cat,
-    presets:(d.serv||[]).map(function(s){return [s[0],s[1]];}),defQty:d.defg||100,ingredients:null,allergens:[],traces:[],allergenText:""};
+  var src=(typeof FOOD_SRC!=="undefined"&&FOOD_SRC[key])||null,CU=(typeof FOOD_UNITS!=="undefined"&&src&&src.t!=="unverified"&&FOOD_UNITS[key])||{};
+  var pre=(d.serv||[]).map(function(s){return [s[0],s[1]];});
+  Object.keys(CU).forEach(function(u){pre.push(["1 "+(u==="large"?"large egg":u==="piece"&&d.k==="egg"?"medium egg":u),CU[u].g]);});
+  return {src:"db",ref:key,name:d.name,state:st,states:states,unit:d.u||"g",per100:{kcal:v[0],p:v[1],c:v[2],f:v[3],fib:v[4]},cat:d.cat,
+    presets:pre,defQty:d.defg||100,ingredients:null,allergens:[],traces:[],allergenText:"",
+    source:src&&src.t!=="unverified"?(src.t==="frida"?"Frida (DTU)":"USDA FoodData Central")+(src.ref?", "+src.ref:""):undefined};
 }
 function catOf(it){
   if(it.cat)return it.cat;
@@ -1166,7 +1185,7 @@ function baseDrink(kind){
   var own=DB.get(K.custom,[]).filter(function(c){return c.drinkKind===kind;}).slice(-1)[0];
   if(own){var x=clone(own);x.src="custom";x.ref=own.id;x.presets=[];return x;}
   var B={water:{name:"Water",per100:ZERO,note:"Plain water: 0 kcal."},sparkling:{name:"Sparkling water (plain, unflavoured)",per100:ZERO,note:"Plain, unflavoured sparkling water: 0 kcal. For flavoured or sweetened kinds, use Barcode or Other drink."},
-    coffee:{name:"Black coffee",per100:{kcal:1,p:0.12,c:0,f:0.02,fib:0},note:"Brewed black coffee: about 1 kcal per 100 ml (USDA FoodData Central, FDC 171890). Milk or sugar is not included."},
+    coffee:{name:"Black coffee",per100:(byKey.coffee_black?{kcal:byKey.coffee_black.s.aseaten[0],p:byKey.coffee_black.s.aseaten[1],c:byKey.coffee_black.s.aseaten[2],f:byKey.coffee_black.s.aseaten[3],fib:byKey.coffee_black.s.aseaten[4]}:{kcal:1,p:0.12,c:0,f:0.02,fib:0}),note:"Brewed black coffee: about 1 kcal per 100 ml (USDA FoodData Central, FDC 171890). Milk or sugar is not included."},
     tea:{name:"Tea (plain)",per100:UNKNOWN,note:"The Food Tracker has no verified nutrition data for tea, so only the volume is counted. Enter label values once if you want calories included."}}[kind];
   if(!B)return null;
   return {src:"drink",ref:kind,name:B.name,unit:"ml",per100:clone(B.per100),cat:null,presets:[],ingredients:null,allergens:[],traces:[],allergenText:"",drinkNote:B.note};
@@ -1201,7 +1220,8 @@ function searchResults(q){
   var nq=norm(q).trim();var out=[];
   if(!nq)return out;
   var seen={};
-  SC.searchFoods(q,40).forEach(function(r){if(seen[r.d.k])return;seen[r.d.k]=1;out.push({kind:"db",key:r.d.k,name:r.d.name,sub:r.d.cat+" · "+Object.keys(r.d.s).map(function(k){return stateLabel[k]||k;}).join(", "),v:r.d.s[Object.keys(r.d.s)[0]]});});
+  SC.searchFoods(q,60).forEach(function(r){if(seen[r.d.k])return;seen[r.d.k]=1;var st=(FOOD_SRC[r.d.k]||{}).t||"unverified";out.push({kind:CAT_DRINK[r.d.k]?"drink":"db",drink:CAT_DRINK[r.d.k],key:r.d.k,name:r.d.name,unit:r.d.u||"g",srcT:st,sub:r.d.cat+" · "+Object.keys(r.d.s).map(function(k){return stateLabel[k]||k;}).join(", "),v:r.d.s[Object.keys(r.d.s)[0]]});});
+  out.sort(function(a,b){var ra=(CAT_SRC_TYPE[a.srcT]||{rank:3}).rank,rb=(CAT_SRC_TYPE[b.srcT]||{rank:3}).rank;var ea=norm(a.name).indexOf(nq)===0?0:1,eb=norm(b.name).indexOf(nq)===0?0:1;return ea-eb||ra-rb;});
   DB.get(K.custom,[]).forEach(function(f){if(norm(f.name).indexOf(nq)>=0)out.push({kind:"custom",id:f.id,name:f.name,sub:"Your saved food · per 100 "+f.unit,p100:f.per100});});
   DB.get(K.favs,[]).forEach(function(f){if(f.src==="off"&&norm(f.name+" "+(f.brand||"")).indexOf(nq)>=0)out.push({kind:"fav",id:f.favId,name:f.name,sub:"★ Favourite · Open Food Facts"+(f.brand?" · "+f.brand:""),p100:f.per100});});
   return out.slice(0,24);
@@ -1254,7 +1274,8 @@ var SPOONS=[["½ tsp",1/6],["1 tsp",1/3],["½ tbsp",0.5],["1 tbsp",1],["2 tbsp",
 function tbspOf(food){
   if(!food)return null;if(food.unit==="ml")return {g:15,src:"ml"};
   var own=DB.get(K.spoons,{})[itemRef(food)];if(own)return {g:own,src:"own"};
-  if(food.src==="db"&&SPOON_STD[food.ref])return {g:SPOON_STD[food.ref],src:"std"};
+  if(food.src==="db"&&SPOON_STD[food.ref])return {g:SPOON_STD[food.ref],src:"std",std:"USDA standard portion: 1 tbsp = "+fmtN(SPOON_STD[food.ref])+" g."};
+  if(food.src==="db"&&typeof CAT_TBSP!=="undefined"&&CAT_TBSP[food.ref])return {g:CAT_TBSP[food.ref].g,src:"std",std:"USDA household weight: NDB "+CAT_TBSP[food.ref].src+"."};
   return null;
 }
 function half(n){return Math.round(n*2)/2;}
@@ -1437,12 +1458,13 @@ function foodsListHTML(q,ctx){
     if(!h)h='<p class="empty">Search the food list in English or Danish, or type a barcode number.</p>';
     return h;
   }
-  var rs=searchResults(q);
-  if(!rs.length)return '<p class="empty">No matches for “'+esc(q)+'”.</p><button type="button" class="linkbtn" data-act="manual">Enter label values instead</button>';
-  return rs.map(function(r){
+  var rs=searchResults(q),qe=qeIsDescription(q)?'<button type="button" class="row qe-row" data-act="qe-open-q"><span class="n">✎ Quick Estimate “'+esc(q.trim().length>40?q.trim().slice(0,39)+"…":q.trim())+'”<small>Split into foods and amounts, then check before saving</small></span><span class="k">›</span></button>':'';
+  if(!rs.length)return qe+'<p class="empty">No matches for “'+esc(q)+'”.</p><button type="button" class="linkbtn" data-act="manual">Enter label values instead</button>';
+  return qe+rs.map(function(r){
     var k=r.v?r.v[0]:(r.p100?r.p100.kcal:null);
-    var attr=r.kind==="db"?'data-db="'+r.key+'"':r.kind==="custom"?'data-own="'+esc(r.id)+'"':'data-fav="'+esc(r.id)+'"';
-    return '<button type="button" class="row" '+attr+'><span class="n">'+esc(r.name)+'<small>'+(k!=null?fmtK(k)+' kcal per 100':'kcal unknown')+'</small></span><span class="k">›</span></button>';
+    var attr=r.kind==="db"?'data-db="'+r.key+'"':r.kind==="drink"?'data-drink="'+esc(r.drink)+'"':r.kind==="custom"?'data-own="'+esc(r.id)+'"':'data-fav="'+esc(r.id)+'"';
+    var tag=r.srcT?' · '+(CAT_SRC_TYPE[r.srcT]||CAT_SRC_TYPE.unverified).short:'';
+    return '<button type="button" class="row" '+attr+'><span class="n">'+esc(r.name)+'<small>'+(k!=null?fmtK(k)+' kcal per 100'+(r.unit==="ml"?' ml':''):'kcal unknown')+esc(tag)+'</small></span><span class="k">›</span></button>';
   }).join('')+'<button type="button" class="linkbtn" data-act="manual">Not here? Enter label values</button>';
 }
 
@@ -2522,13 +2544,13 @@ document.addEventListener("change",function(ev){
    bflfood_kitchen_v1 (My Kitchen), bflfood_ideas_v1 (Saved Food Ideas), bflfood_smartfuel_v1 (preferences, excluded foods).
    Nutrition comes from the app's food list, your own foods, or USDA values noted below. Missing values are shown as missing. */
 K.kitchen="bflfood_kitchen_v1";K.ideas="bflfood_ideas_v1";K.sfprefs="bflfood_smartfuel_v1";
-var SF_EXTRA={egg:{name:"Egg (whole)",per100:{kcal:143,p:12.6,c:0.72,f:9.51,fib:0},src:"USDA FoodData Central, FDC 171287"}};
+var SF_EXTRA={}; /* egg moved into the unified food catalogue (same USDA values, FDC 171287) */
 /* how each ingredient is portioned: unit = one piece in grams (from the food list or USDA), otherwise grams */
 var SF_ING={
   rice_cakes:{food:["db","rice_cakes"],unit:["rice cake","rice cakes",9],def:3},
   banana:{food:["db","banana"],unit:["medium banana","medium bananas",118],def:1},
   gf_oats:{food:["db","gf_oats"],g:40,step:10},
-  egg:{food:["sf","egg"],unit:["medium egg","medium eggs",44],def:2},
+  egg:{food:["db","egg"],unit:["medium egg","medium eggs",44],def:2},
   honey:{food:["db","honey"],unit:["tsp honey","tsp honey",7],def:1},
   white_rice:{food:["db","jasmine_rice","cooked"],g:150,step:25,note:"Values for cooked jasmine rice (a white rice)."},
   potato:{food:["db","potato","cooked"],g:200,step:50},
@@ -2582,7 +2604,7 @@ function sfFood(key){
     if(kit.link.kind==="db")return dbFood(kit.link.ref,kit.link.state);}
   var d=SF_ING[key];if(!d||!d.food)return null;
   if(d.food[0]==="db")return dbFood(d.food[1],d.food[2]);
-  var e=SF_EXTRA[d.food[1]];return {src:"sf",ref:d.food[1],name:e.name,unit:"g",per100:clone(e.per100),cat:null,presets:[],ingredients:null,allergens:[],traces:[],allergenText:"",source:e.src};
+  var e=SF_EXTRA[d.food[1]];if(!e)return null;return {src:"sf",ref:d.food[1],name:e.name,unit:"g",per100:clone(e.per100),cat:null,presets:[],ingredients:null,allergens:[],traces:[],allergenText:"",source:e.src};
 }
 function sfIng(key){var d=SF_ING[key];if(d)return d;var kit=loadKitchen().items.filter(function(x){return x.id===key;})[0];return {food:null,g:kit&&kit.g||100,step:kit&&kit.step||10};}
 function sfName(key){var kit=loadKitchen().items.filter(function(x){return x.id===key;})[0];if(kit)return kit.name;var f=sfFood(key);return f?f.name:key;}
@@ -2784,6 +2806,306 @@ function render(){
 }
 function go(tab){APP.tab=tab;setUi({tab2:tab});render();try{window.scrollTo(0,0);}catch(e){}}
 
+/* ============================== UNIFIED FOOD CATALOGUE ============================== */
+/* One food list for search, logging, Smart Fuel and Quick Estimate. Every food carries a source:
+   - "frida": Frida food data from DTU (preferred for Danish foods). None added yet: nothing has been
+     retrieved from Frida, and the app has NO live connection to Frida.
+   - "usda": USDA FoodData Central, SR Legacy (values read from the USDA SR28 data file, cited by NDB number).
+   - "unverified": the original 39 foods copied from Body Fuel Lab. Values are unchanged; their source was never recorded.
+   Logged entries keep a copy of the values they were logged with, so history never changes when this list grows. */
+var CAT_SRC_TYPE={
+  frida:{rank:0,short:"Frida (DTU)",label:"Frida food data, DTU National Food Institute",cls:"ev-strong"},
+  usda:{rank:1,short:"USDA",label:"USDA FoodData Central, SR Legacy",cls:"ev-strong"},
+  own:{rank:2,short:"Your food",label:"Your own food, from a label",cls:"ev-pref"},
+  off:{rank:2,short:"Open Food Facts",label:"Open Food Facts (barcode)",cls:"ev-pref"},
+  unverified:{rank:5,short:"Unverified",label:"Source not recorded (from Body Fuel Lab)",cls:"ev-emerging"}
+};
+var FOOD_SRC={},FOOD_UNITS={},CAT_TBSP={},CAT_DRINK={};
+var CATALOGUE_ADD=[{"d":{"k":"bread_white_home","name":"White bread, homemade","cat":"Carb","s":{"aseaten":[285.0,7.9,49.6,5.7,2.0]},"defg":42,"u":"g"},"aliases":["hjemmebagt franskbrod","hjemmebagt brod","hjemmebagt hvidt brod","homemade white bread","homemade bread","white bread homemade"],"src":{"t":"usda","ref":"NDB 18073","desc":"Bread, white, prepared from recipe, made with low fat (2%) milk","note":""},"units":{"slice":{"g":42,"src":"USDA household weight: 1 slice = 42 g"}}},{"d":{"k":"bread_white","name":"White bread (franskbrød, toast)","cat":"Carb","s":{"aseaten":[266.0,8.85,49.42,3.33,2.7]},"defg":29,"u":"g"},"aliases":["franskbrod","toastbrod","toast","white bread","hvidt brod","bread","brod"],"src":{"t":"usda","ref":"NDB 18069","desc":"Bread, white, commercially prepared (includes soft bread crumbs)","note":""},"units":{"slice":{"g":29,"src":"USDA household weight: 1 slice = 29 g"}}},{"d":{"k":"bread_wholewheat","name":"Whole-wheat bread (fuldkornsbrød)","cat":"Carb","s":{"aseaten":[252.0,12.45,42.71,3.5,6.0]},"defg":32,"u":"g"},"aliases":["fuldkornsbrod","grovbrod","whole wheat bread","wholemeal bread","brown bread"],"src":{"t":"usda","ref":"NDB 18075","desc":"Bread, whole-wheat, commercially prepared","note":""},"units":{"slice":{"g":32,"src":"USDA household weight: 1 slice = 32 g"}}},{"d":{"k":"bread_multigrain","name":"Multigrain bread (flerkornsbrød)","cat":"Carb","s":{"aseaten":[265.0,13.36,43.34,4.23,7.4]},"defg":26,"u":"g"},"aliases":["flerkornsbrod","multigrain bread","multi-grain bread","kernebrod"],"src":{"t":"usda","ref":"NDB 28397","desc":"Bread, multi-grain (includes whole-grain)","note":""},"units":{"slice":{"g":26,"src":"USDA household weight: 1 regular slice = 26 g"}}},{"d":{"k":"rugbrod","name":"Rugbrød (dark rye bread)","cat":"Carb","s":{"aseaten":[250.0,8.7,47.5,3.1,6.5]},"defg":40,"u":"g"},"aliases":["rugbrod","rugbrodet","rye bread","dark rye","pumpernickel","smorrebrod"],"src":{"t":"usda","ref":"NDB 18044","desc":"Bread, pumpernickel","note":"No Danish value yet. Uses USDA 'Bread, pumpernickel', the closest USDA match. Real rugbrød varies by brand and seeds."},"units":{"slice":{"g":40,"src":"Estimate: a Danish rugbrød slice is often about 40 g. Weigh one to check."}}},{"d":{"k":"bread_rye_light","name":"Light rye bread (sigtebrød)","cat":"Carb","s":{"aseaten":[259.0,8.5,48.3,3.3,5.8]},"defg":32,"u":"g"},"aliases":["sigtebrod","lyst rugbrod","light rye bread"],"src":{"t":"usda","ref":"NDB 18060","desc":"Bread, rye","note":""},"units":{"slice":{"g":32,"src":"USDA household weight: 1 regular slice = 32 g"}}},{"d":{"k":"roll_white","name":"Bread roll (bolle, rundstykke)","cat":"Carb","s":{"aseaten":[310.0,10.86,52.04,6.47,2.0]},"defg":55,"u":"g"},"aliases":["bolle","boller","rundstykke","rundstykker","roll","rolls","bread roll","bun"],"src":{"t":"usda","ref":"NDB 18342","desc":"Rolls, dinner, plain, commercially prepared (includes brown-and-serve)","note":""},"units":{"piece":{"g":55,"src":"Estimate: a Danish rundstykke is often 50 to 60 g (a US dinner roll is 28 g)."}}},{"d":{"k":"crispbread","name":"Rye crispbread (knækbrød)","cat":"Carb","s":{"aseaten":[334.0,9.6,80.4,0.9,22.9]},"defg":11,"u":"g"},"aliases":["knaekbrod","crispbread","rye crispbread","ryvita","wasa"],"src":{"t":"usda","ref":"NDB 18226","desc":"Crackers, rye, wafers, plain","note":""},"units":{"piece":{"g":11,"src":"Estimate: one crispbread is usually 10 to 13 g. Check the pack."}}},{"d":{"k":"butter_usda","name":"Butter, salted (smør)","cat":"Fat","s":{"aseaten":[717.0,0.85,0.06,81.11,0.0]},"defg":5,"u":"g"},"aliases":["smor","butter","salted butter","smor saltet"],"src":{"t":"usda","ref":"NDB 01001","desc":"Butter, salted","note":""},"units":{"pat":{"g":5,"src":"USDA household weight: 1 pat = 5 g"}},"tbsp":[14.2,"01001 '1 tbsp' = 14,2 g"]},{"d":{"k":"butter_blend","name":"Butter blend spread (smørbar)","cat":"Fat","s":{"aseaten":[727.0,0.31,0.77,80.32,0.0]},"defg":5,"u":"g"},"aliases":["smorbar","blandingsprodukt","kaergarden","butter blend","spreadable butter"],"src":{"t":"usda","ref":"NDB 04585","desc":"Margarine-like, margarine-butter blend, soybean oil and butter","note":"Danish blends differ slightly; scan the barcode for your brand."},"tbsp":[14.1,"04585 '1 tbsp' = 14,1 g"]},{"d":{"k":"cheese_gouda","name":"Cheese, semi-hard (Danbo, Havarti, gouda)","cat":"Protein","s":{"aseaten":[356.0,24.94,2.22,27.44,0.0]},"defg":10,"u":"g"},"aliases":["ost","skiveost","danbo","havarti","gouda","riberhus","cheese","cheese slice","osteskive","mellemlagret ost","lagret ost"],"src":{"t":"usda","ref":"NDB 01022","desc":"Cheese, gouda","note":"No Danish value yet. Uses USDA 'Cheese, gouda'. Danish semi-hard cheeses are similar but fat content varies (look for 30+ or 45+ on the label)."},"units":{"slice":{"g":10,"src":"Estimate: one thin slice from a cheese slicer is often about 10 g. Weigh a few slices to check."}}},{"d":{"k":"cheese_cheddar","name":"Cheese, cheddar","cat":"Protein","s":{"aseaten":[404.0,22.87,3.09,33.31,0.0]},"defg":20,"u":"g"},"aliases":["cheddar"],"src":{"t":"usda","ref":"NDB 01009","desc":"Cheese, cheddar","note":""}},{"d":{"k":"cottage_cheese","name":"Cottage cheese, low-fat (hytteost)","cat":"Protein","s":{"aseaten":[81.0,10.45,4.76,2.27,0.0]},"defg":113,"u":"g"},"aliases":["hytteost","huttenkase","cottage cheese"],"src":{"t":"usda","ref":"NDB 01015","desc":"Cheese, cottage, lowfat, 2% milkfat","note":""},"units":{"portion":{"g":113,"src":"USDA household weight: 4 oz = 113 g"}}},{"d":{"k":"milk_whole","name":"Whole milk (sødmælk, 3.25%)","cat":"Mixed","s":{"aseaten":[63,3.25,4.95,3.35,0.0]},"defg":200,"u":"ml"},"aliases":["sodmaelk","whole milk","full fat milk","maelk","milk"],"src":{"t":"usda","ref":"NDB 01077","desc":"Milk, whole, 3.25% milkfat, with added vitamin D","note":"Converted from per 100 g to per 100 ml with USDA's 1 cup = 244 g (1 cup = 236,6 ml)."},"units":{"glass":{"g":200,"src":"Estimate: a Danish glass holds about 200 ml."}}},{"d":{"k":"milk_2","name":"Milk 2% (closest to letmælk)","cat":"Mixed","s":{"aseaten":[52,3.4,4.95,2.04,0.0]},"defg":200,"u":"ml"},"aliases":["letmaelk","2% milk","semi-skimmed milk","semi skimmed milk","maelk","milk"],"src":{"t":"usda","ref":"NDB 01079","desc":"Milk, reduced fat, fluid, 2% milkfat, with added vitamin A and vitamin D","note":"Danish letmælk is 1.5% fat; USDA has 1% and 2%, so this is the closer, slightly higher estimate. Converted from per 100 g to per 100 ml with USDA's 1 cup = 244 g (1 cup = 236,6 ml)."},"units":{"glass":{"g":200,"src":"Estimate: a Danish glass holds about 200 ml."}}},{"d":{"k":"milk_1","name":"Milk 1% (closest to minimælk)","cat":"Mixed","s":{"aseaten":[43,3.48,5.15,1.0,0.0]},"defg":200,"u":"ml"},"aliases":["minimaelk","1% milk","lowfat milk","low-fat milk"],"src":{"t":"usda","ref":"NDB 01082","desc":"Milk, lowfat, fluid, 1% milkfat, with added vitamin A and vitamin D","note":"Danish minimælk is 0.5% fat; USDA 1% milk is the closest. Converted from per 100 g to per 100 ml with USDA's 1 cup = 244 g (1 cup = 236,6 ml)."},"units":{"glass":{"g":200,"src":"Estimate: a Danish glass holds about 200 ml."}}},{"d":{"k":"milk_skim","name":"Skimmed milk (skummetmælk)","cat":"Mixed","s":{"aseaten":[35,3.49,5.14,0.08,0.0]},"defg":200,"u":"ml"},"aliases":["skummetmaelk","skim milk","skimmed milk","fat free milk"],"src":{"t":"usda","ref":"NDB 01085","desc":"Milk, nonfat, fluid, with added vitamin A and vitamin D (fat free or skim)","note":"Converted from per 100 g to per 100 ml with USDA's 1 cup = 245 g (1 cup = 236,6 ml)."},"units":{"glass":{"g":200,"src":"Estimate: a Danish glass holds about 200 ml."}}},{"d":{"k":"yogurt_plain","name":"Plain yoghurt, whole milk","cat":"Mixed","s":{"aseaten":[61.0,3.47,4.66,3.25,0.0]},"defg":150,"u":"g"},"aliases":["yoghurt","yogurt","yoghurt naturel","plain yoghurt","plain yogurt"],"src":{"t":"usda","ref":"NDB 01116","desc":"Yogurt, plain, whole milk, 8 grams protein per 8 ounce","note":""},"units":{"portion":{"g":170,"src":"USDA household weight: 1 container (6 oz) = 170 g"}}},{"d":{"k":"yogurt_greek","name":"Greek yoghurt, low-fat","cat":"Protein","s":{"aseaten":[73.0,9.95,3.94,1.92,0.0]},"defg":150,"u":"g"},"aliases":["graesk yoghurt","greek yoghurt","greek yogurt"],"src":{"t":"usda","ref":"NDB 01287","desc":"Yogurt, Greek, plain, lowfat","note":""},"units":{"portion":{"g":200,"src":"USDA household weight: 1 container (7 oz) = 200 g"}}},{"d":{"k":"cream_light","name":"Coffee cream (kaffefløde)","cat":"Fat","s":{"aseaten":[191.0,2.96,2.82,19.1,0.0]},"defg":15,"u":"g"},"aliases":["kaffeflode","coffee cream","light cream","flode","cream"],"src":{"t":"usda","ref":"NDB 01050","desc":"Cream, fluid, light (coffee cream or table cream)","note":""},"tbsp":[15.0,"01050 '1 tbsp' = 15 g"]},{"d":{"k":"cream_heavy","name":"Whipping cream (piskefløde)","cat":"Fat","s":{"aseaten":[340.0,2.84,2.74,36.08,0.0]},"defg":30,"u":"g"},"aliases":["piskeflode","whipping cream","heavy cream","double cream"],"src":{"t":"usda","ref":"NDB 01053","desc":"Cream, fluid, heavy whipping","note":""},"tbsp":[14.9,"01053 '1 cup, fluid' = 238 g, so 1 tbsp (1/16 cup) = 14,9 g"]},{"d":{"k":"egg_boiled","name":"Egg, hard-boiled","cat":"Protein","s":{"aseaten":[155.0,12.58,1.12,10.61,0.0]},"defg":50,"u":"g"},"aliases":["kogt aeg","kogte aeg","hardkogt aeg","blodkogt aeg","boiled egg","boiled eggs","hard boiled egg"],"src":{"t":"usda","ref":"NDB 01129","desc":"Egg, whole, cooked, hard-boiled","note":""},"units":{"piece":{"g":50,"src":"USDA household weight: 1 large egg = 50 g (USDA 'Egg, whole, raw, fresh')"}}},{"d":{"k":"potato_skin","name":"Potatoes, boiled in skin","cat":"Carb","s":{"cooked":[87.0,1.87,20.13,0.1,1.8]},"defg":150,"u":"g"},"aliases":["kogte kartofler","kartofler","kartoffel","nye kartofler","potato","potatoes","boiled potatoes"],"src":{"t":"usda","ref":"NDB 11365","desc":"Potatoes, boiled, cooked in skin, flesh, without salt","note":""},"units":{"piece":{"g":136,"src":"USDA household weight: 1 potato (2½ in) = 136 g"}}},{"d":{"k":"potato_mash","name":"Mashed potatoes, homemade (kartoffelmos)","cat":"Carb","s":{"aseaten":[113.0,1.86,16.81,4.22,1.5]},"defg":150,"u":"g"},"aliases":["kartoffelmos","mos","mashed potatoes","mashed potato","mash"],"src":{"t":"usda","ref":"NDB 11934","desc":"Potatoes, mashed, home-prepared, whole milk and butter added","note":"With whole milk and butter."},"units":{"cup":{"g":210,"src":"USDA household weight: 1 cup = 210 g"}}},{"d":{"k":"potato_fries","name":"Oven chips (pommes frites)","cat":"Carb","s":{"aseaten":[172.0,2.66,28.71,5.22,2.6]},"defg":100,"u":"g"},"aliases":["pommes frites","fritter","fries","chips","oven chips"],"src":{"t":"usda","ref":"NDB 11841","desc":"Potatoes, french fried, all types, salt not added in processing, frozen, oven-heated","note":"Frozen, oven-heated."}},{"d":{"k":"potato_baked","name":"Baked potato (bagt kartoffel)","cat":"Carb","s":{"cooked":[93.0,2.5,21.15,0.13,2.2]},"defg":148,"u":"g"},"aliases":["bagt kartoffel","bagte kartofler","baked potato"],"src":{"t":"usda","ref":"NDB 11674","desc":"Potatoes, baked, flesh and skin, without salt","note":"Flesh and skin."},"units":{"piece":{"g":148,"src":"USDA household weight: 1 serving = 148 g"}}},{"d":{"k":"pork_mince","name":"Pork mince, cooked (svinekød)","cat":"Protein","s":{"cooked":[297.0,25.69,0.0,20.77,0.0]},"defg":100,"u":"g"},"aliases":["hakket svinekod","svinefars","fars","pork mince","ground pork"],"src":{"t":"usda","ref":"NDB 10220","desc":"Pork, fresh, ground, cooked","note":""}},{"d":{"k":"frikadelle","name":"Frikadelle (Danish meatball)","cat":"Protein","s":{"cooked":[297.0,25.69,0.0,20.77,0.0]},"defg":50,"u":"g"},"aliases":["frikadelle","frikadeller","meatball","meatballs"],"src":{"t":"usda","ref":"NDB 10220","desc":"Pork, fresh, ground, cooked","note":"No documented value for frikadeller. Estimated as USDA cooked pork mince; real frikadeller also contain egg, onion, breadcrumbs and frying fat."},"units":{"piece":{"g":50,"src":"Estimate: one frikadelle is often 40 to 60 g."}}},{"d":{"k":"beef_mince_85","name":"Beef mince 15% fat, cooked","cat":"Protein","s":{"cooked":[256.0,27.73,0.0,15.3,0.0]},"defg":100,"u":"g"},"aliases":["hakket oksekod","oksefars","beef mince","ground beef"],"src":{"t":"usda","ref":"NDB 23570","desc":"Beef, ground, 85% lean meat / 15% fat, crumbles, cooked, pan-browned","note":"Pan-browned crumbles."}},{"d":{"k":"pork_loin","name":"Pork chop / loin, roasted (kotelet, flæskesteg)","cat":"Protein","s":{"cooked":[248.0,27.09,0.0,14.65,0.0]},"defg":100,"u":"g"},"aliases":["kotelet","koteletter","svinekotelet","pork chop","flaeskesteg","svinekam","pork roast","pork loin"],"src":{"t":"usda","ref":"NDB 10023","desc":"Pork, fresh, loin, whole, separable lean and fat, cooked, roasted","note":"Flæskesteg with crackling has more fat."},"units":{"piece":{"g":89,"src":"USDA household weight: 1 chop, without bone = 89 g"}}},{"d":{"k":"pork_sausage","name":"Pork sausage, fried (medisterpølse, pølse)","cat":"Protein","s":{"cooked":[325.0,18.53,1.42,27.25,0.0]},"defg":60,"u":"g"},"aliases":["medister","medisterpolse","polse","polser","sausage","sausages","pork sausage"],"src":{"t":"usda","ref":"NDB 07064","desc":"Pork sausage, link/patty, cooked, pan-fried","note":"Danish sausages vary; scan the barcode for your brand."},"units":{"piece":{"g":60,"src":"Estimate: a Danish sausage is often 50 to 70 g (a US link is 23 g)."}}},{"d":{"k":"chicken_roast","name":"Chicken, roasted, with skin","cat":"Protein","s":{"cooked":[239.0,27.3,0.0,13.6,0.0]},"defg":120,"u":"g"},"aliases":["stegt kylling","kylling med skind","roast chicken","kylling"],"src":{"t":"usda","ref":"NDB 05009","desc":"Chicken, broilers or fryers, meat and skin, cooked, roasted","note":""}},{"d":{"k":"salami","name":"Salami","cat":"Protein","s":{"aseaten":[336.0,21.85,2.4,25.9,0.0]},"defg":12.3,"u":"g"},"aliases":["salami","spegepolse"],"src":{"t":"usda","ref":"NDB 07069","desc":"Salami, cooked, beef and pork","note":"Cooked, beef and pork."},"units":{"slice":{"g":12.3,"src":"USDA household weight: 1 round slice = 12,3 g"}}},{"d":{"k":"liver_pate","name":"Leverpostej (liver pâté)","cat":"Protein","s":{"aseaten":[319.0,14.2,1.5,28.0,0.0]},"defg":20,"u":"g"},"aliases":["leverpostej","postej","liver pate","liver pâté","pate"],"src":{"t":"usda","ref":"NDB 07055","desc":"Pate, liver, not specified, canned","note":"No Danish value yet. Uses USDA 'Pate, liver, canned'; Danish leverpostej is usually a little lower in fat."},"units":{"portion":{"g":20,"src":"Estimate: a layer on one slice of bread is often about 20 g."}},"tbsp":[13.0,"07055 '1 tbsp' = 13 g"]},{"d":{"k":"cod","name":"Cod, cooked (torsk)","cat":"Protein","s":{"cooked":[105.0,22.83,0.0,0.86,0.0]},"defg":150,"u":"g"},"aliases":["torsk","kogt torsk","cod","fiskefilet"],"src":{"t":"usda","ref":"NDB 15016","desc":"Fish, cod, Atlantic, cooked, dry heat","note":""},"units":{"piece":{"g":180,"src":"USDA household weight: 1 fillet = 180 g"}}},{"d":{"k":"plaice","name":"Plaice / flatfish, cooked (rødspætte)","cat":"Protein","s":{"cooked":[86.0,15.24,0.0,2.37,0.0]},"defg":127,"u":"g"},"aliases":["rodspaette","fladfisk","plaice","flounder","sole"],"src":{"t":"usda","ref":"NDB 15029","desc":"Fish, flatfish (flounder and sole species), cooked, dry heat","note":""},"units":{"piece":{"g":127,"src":"USDA household weight: 1 fillet = 127 g"}}},{"d":{"k":"herring_pickled","name":"Pickled herring (sild)","cat":"Protein","s":{"aseaten":[262.0,14.19,9.64,18.0,0.0]},"defg":40,"u":"g"},"aliases":["sild","marinerede sild","kryddersild","pickled herring","herring"],"src":{"t":"usda","ref":"NDB 15041","desc":"Fish, herring, Atlantic, pickled","note":""},"units":{"piece":{"g":20,"src":"Estimate: one piece of marinated herring is often about 20 g."}}},{"d":{"k":"mackerel","name":"Mackerel, cooked (makrel)","cat":"Protein","s":{"cooked":[262.0,23.85,0.0,17.81,0.0]},"defg":80,"u":"g"},"aliases":["makrel","mackerel"],"src":{"t":"usda","ref":"NDB 15047","desc":"Fish, mackerel, Atlantic, cooked, dry heat","note":"Plain cooked mackerel. Makrel i tomat in a tin is different; scan its barcode."},"units":{"piece":{"g":88,"src":"USDA household weight: 1 fillet = 88 g"}}},{"d":{"k":"salmon_farmed","name":"Salmon, farmed, cooked","cat":"Protein","s":{"cooked":[206.0,22.1,0.0,12.35,0.0]},"defg":125,"u":"g"},"aliases":["laks","laksefilet","salmon"],"src":{"t":"usda","ref":"NDB 15237","desc":"Fish, salmon, Atlantic, farmed, cooked, dry heat","note":""},"units":{"piece":{"g":178,"src":"USDA household weight: ½ fillet = 178 g"}}},{"d":{"k":"fish_fingers","name":"Fish fingers, oven-baked (fiskepinde)","cat":"Mixed","s":{"aseaten":[277.0,11.01,21.66,16.23,1.5]},"defg":112,"u":"g"},"aliases":["fiskepinde","fish fingers","fish sticks"],"src":{"t":"usda","ref":"NDB 15027","desc":"Fish, fish sticks, frozen, prepared","note":""},"units":{"piece":{"g":28,"src":"USDA household weight: 1 stick = 28 g"}}},{"d":{"k":"red_cabbage","name":"Red cabbage, cooked (rødkål)","cat":"Veg & fruit","s":{"cooked":[29.0,1.51,6.94,0.09,2.6]},"defg":75,"u":"g"},"aliases":["rodkal","red cabbage"],"src":{"t":"usda","ref":"NDB 11113","desc":"Cabbage, red, cooked, boiled, drained, without salt","note":"Plain boiled red cabbage. Danish rødkål usually has added sugar, vinegar or fruit juice, so it has more calories; scan the jar's barcode if you can."}},{"d":{"k":"broccoli","name":"Broccoli, cooked","cat":"Veg & fruit","s":{"cooked":[35.0,2.38,7.18,0.41,3.3]},"defg":80,"u":"g"},"aliases":["broccoli"],"src":{"t":"usda","ref":"NDB 11091","desc":"Broccoli, cooked, boiled, drained, without salt","note":""}},{"d":{"k":"cauliflower","name":"Cauliflower, cooked (blomkål)","cat":"Veg & fruit","s":{"cooked":[23.0,1.84,4.11,0.45,2.3]},"defg":80,"u":"g"},"aliases":["blomkal","cauliflower"],"src":{"t":"usda","ref":"NDB 11136","desc":"Cauliflower, cooked, boiled, drained, without salt","note":""}},{"d":{"k":"carrot_raw","name":"Carrots, raw (gulerødder)","cat":"Veg & fruit","s":{"raw":[41.0,0.93,9.58,0.24,2.8]},"defg":80,"u":"g"},"aliases":["raa gulerod","raw carrot","gulerod","gulerodder","carrot"],"src":{"t":"usda","ref":"NDB 11124","desc":"Carrots, raw","note":""}},{"d":{"k":"tomato","name":"Tomato (tomat)","cat":"Veg & fruit","s":{"raw":[18.0,0.88,3.89,0.2,1.2]},"defg":80,"u":"g"},"aliases":["tomat","tomater","tomato","tomatoes"],"src":{"t":"usda","ref":"NDB 11529","desc":"Tomatoes, red, ripe, raw, year round average","note":""}},{"d":{"k":"onion","name":"Onion, raw (løg)","cat":"Veg & fruit","s":{"raw":[40.0,1.1,9.34,0.1,1.7]},"defg":40,"u":"g"},"aliases":["log","onion","onions"],"src":{"t":"usda","ref":"NDB 11282","desc":"Onions, raw","note":""}},{"d":{"k":"lettuce","name":"Iceberg lettuce (icebergsalat)","cat":"Veg & fruit","s":{"raw":[14.0,0.9,2.97,0.14,1.2]},"defg":40,"u":"g"},"aliases":["icebergsalat","iceberg","lettuce"],"src":{"t":"usda","ref":"NDB 11252","desc":"Lettuce, iceberg (includes crisphead types), raw","note":""}},{"d":{"k":"orange","name":"Orange (appelsin)","cat":"Veg & fruit","s":{"raw":[49.0,0.91,12.54,0.15,2.2]},"defg":140,"u":"g"},"aliases":["appelsin","appelsiner","orange","oranges"],"src":{"t":"usda","ref":"NDB 09202","desc":"Oranges, raw, navels","note":""},"units":{"piece":{"g":140,"src":"USDA household weight: 1 fruit = 140 g"}}},{"d":{"k":"rice_white","name":"White rice, cooked (ris)","cat":"Carb","s":{"cooked":[130.0,2.69,28.17,0.28,0.4]},"defg":150,"u":"g"},"aliases":["ris","hvide ris","white rice","rice"],"src":{"t":"usda","ref":"NDB 20045","desc":"Rice, white, long-grain, regular, enriched, cooked","note":""},"units":{"cup":{"g":158,"src":"USDA household weight: 1 cup = 158 g"}}},{"d":{"k":"pasta","name":"Pasta, cooked","cat":"Carb","s":{"cooked":[157.0,5.8,30.59,0.93,1.8]},"defg":180,"u":"g"},"aliases":["pasta","spaghetti","penne","makaroni"],"src":{"t":"usda","ref":"NDB 20321","desc":"Pasta, cooked, enriched, with added salt","note":""},"units":{"cup":{"g":124,"src":"USDA household weight: 1 cup = 124 g"}}},{"d":{"k":"oatmeal","name":"Oatmeal porridge with water (havregrød)","cat":"Carb","s":{"aseaten":[71.0,2.54,12.0,1.52,1.7]},"defg":250,"u":"g"},"aliases":["havregrod","grod","porridge","oatmeal","oat porridge"],"src":{"t":"usda","ref":"NDB 08121","desc":"Cereals, oats, regular and quick, unenriched, cooked with water (includes boiling and microwaving), without salt","note":"Made with water. Milk, sugar or butter on top are separate."},"units":{"cup":{"g":234,"src":"USDA household weight: 1 cup = 234 g"}}},{"d":{"k":"rice_pudding","name":"Rice pudding with whole milk (risengrød)","cat":"Carb","s":{"aseaten":[121.0,3.25,20.68,2.82,0.1]},"defg":200,"u":"g"},"aliases":["risengrod","rice pudding","rice porridge"],"src":{"t":"usda","ref":"NDB 19195","desc":"Puddings, rice, dry mix, prepared with whole milk","note":"No Danish value yet. Uses USDA rice pudding made from a mix with whole milk; homemade risengrød is similar but not identical."},"units":{"portion":{"g":128,"src":"USDA household weight: ½ cup = 128 g"}}},{"d":{"k":"gravy","name":"Brown gravy (brun sovs)","cat":"Extra","s":{"aseaten":[53.0,3.75,4.81,2.36,0.4]},"defg":60,"u":"g"},"aliases":["brun sovs","sovs","skysovs","gravy","brown gravy"],"src":{"t":"usda","ref":"NDB 06116","desc":"Gravy, beef, canned, ready-to-serve","note":"No Danish value yet. Uses USDA 'Gravy, beef, canned, ready-to-serve'. Homemade brun sovs with cream or butter has more fat."},"units":{"portion":{"g":60,"src":"Estimate: about 4 tablespoons."}}},{"d":{"k":"jam","name":"Jam (syltetøj, marmelade)","cat":"Extra","s":{"aseaten":[278.0,0.37,68.86,0.07,1.1]},"defg":20,"u":"g"},"aliases":["syltetoj","marmelade","jam","preserves"],"src":{"t":"usda","ref":"NDB 19297","desc":"Jams and preserves","note":""},"tbsp":[20.0,"19297 '1 tbsp' = 20 g"]},{"d":{"k":"sugar","name":"Sugar (sukker)","cat":"Extra","s":{"aseaten":[387.0,0.0,99.98,0.0,0.0]},"defg":4.2,"u":"g"},"aliases":["sukker","sugar"],"src":{"t":"usda","ref":"NDB 19335","desc":"Sugars, granulated","note":""},"tbsp":[12.6,"19335 '1 tsp' = 4,2 g, so 1 tbsp = 12,6 g"]},{"d":{"k":"rapeseed_oil","name":"Rapeseed oil (rapsolie)","cat":"Fat","s":{"aseaten":[884.0,0.0,0.0,100.0,0.0]},"defg":14,"u":"g"},"aliases":["rapsolie","rapeseed oil","canola oil","olie"],"src":{"t":"usda","ref":"NDB 04582","desc":"Oil, canola","note":""},"tbsp":[14.0,"04582 '1 tbsp' = 14 g"]},{"d":{"k":"orange_juice","name":"Orange juice (appelsinjuice)","cat":"Extra","s":{"aseaten":[47,0.73,10.9,0.21,0.21]},"defg":200,"u":"ml"},"aliases":["appelsinjuice","orange juice","juice"],"src":{"t":"usda","ref":"NDB 09206","desc":"Orange juice, raw","note":"Converted from per 100 g to per 100 ml with USDA's 1 cup = 248 g (1 cup = 236,6 ml)."},"units":{"glass":{"g":200,"src":"Estimate: a Danish glass holds about 200 ml."}}},{"d":{"k":"apple_juice","name":"Apple juice (æblejuice)","cat":"Extra","s":{"aseaten":[48,0.1,11.85,0.14,0.21]},"defg":200,"u":"ml"},"aliases":["aeblejuice","apple juice"],"src":{"t":"usda","ref":"NDB 09016","desc":"Apple juice, canned or bottled, unsweetened, without added ascorbic acid","note":"Converted from per 100 g to per 100 ml with USDA's 1 cup = 248 g (1 cup = 236,6 ml)."},"units":{"glass":{"g":200,"src":"Estimate: a Danish glass holds about 200 ml."}}}];
+var CATALOGUE_MOVED=[
+  {d:{k:"egg",name:"Egg (whole)",cat:"Protein",s:{raw:[143,12.6,0.72,9.51,0]},defg:44,u:"g"},
+   aliases:["aeg","egg","eggs","whole egg","raw egg","aeggene"],
+   src:{t:"usda",ref:"FDC 171287 (NDB 01123)",desc:"Egg, whole, raw, fresh",note:"Moved here from Smart Fuel. Same values as before."},
+   units:{piece:{g:44,src:"USDA household weight: 1 medium egg = 44 g"},large:{g:50,src:"USDA household weight: 1 large egg = 50 g"}}},
+  {d:{k:"coffee_black",name:"Black coffee",cat:"Extra",s:{aseaten:[1,0.12,0,0.02,0]},defg:200,u:"ml"},
+   aliases:["kaffe","sort kaffe","black coffee","coffee","filterkaffe","americano"],
+   src:{t:"usda",ref:"FDC 171890 (NDB 14209)",desc:"Beverages, coffee, brewed, prepared with tap water",note:"Moved here from the drinks list. Same values as before. Milk or sugar is not included."},
+   units:{cup:{g:200,src:"Estimate: a mug of coffee is often about 200 ml."}},drink:"coffee"}
+];
+(function(){
+  var BFL_NOTE="Copied unchanged from Body Fuel Lab. Its source was never recorded, so these values aren't checked yet.";
+  FOODDB.forEach(function(d){
+    FOOD_SRC[d.k]={t:"unverified",ref:"",desc:"",note:BFL_NOTE};
+    if(d.serv&&d.serv.length){var m=d.serv.filter(function(s){return /medium/i.test(s[0]);})[0]||d.serv[0];
+      FOOD_UNITS[d.k]={piece:{g:m[1],src:"Body Fuel Lab serving: "+m[0]+" = "+m[1]+" g (source not recorded)"}};}
+  });
+  CATALOGUE_MOVED.concat(CATALOGUE_ADD).forEach(function(x){
+    if(byKey[x.d.k])return;
+    FOODDB.push(x.d);byKey[x.d.k]=x.d;
+    SC.FOOD_ALIASES[x.d.k]=(x.aliases||[]).map(norm);
+    FOOD_SRC[x.d.k]=x.src;
+    if(x.units&&Object.keys(x.units).length)FOOD_UNITS[x.d.k]=x.units;
+    if(x.tbsp)CAT_TBSP[x.d.k]={g:x.tbsp[0],src:x.tbsp[1]};
+    if(x.drink)CAT_DRINK[x.d.k]=x.drink;
+  });
+  /* general knowledge for the food-profile check (same style as the existing GK list) */
+  var GL="Usually made with wheat or rye flour.",LA="A dairy product. It contains lactose.";
+  ["bread_white_home","bread_white","bread_wholewheat","bread_multigrain","rugbrod","bread_rye_light","roll_white","crispbread"].forEach(function(k){GK[k]=Object.assign({},GK[k],{gluten:GL});});
+  GK.fish_fingers={gluten:"Fish fingers are usually breaded with wheat."};
+  GK.gravy={gluten:"Gravy is often thickened with wheat flour."};
+  GK.frikadelle={gluten:"Frikadeller often contain breadcrumbs or flour.",lactose:"Frikadeller are often made with milk."};
+  ["butter_usda","butter_blend","cheese_gouda","cheese_cheddar","cottage_cheese","milk_whole","milk_2","milk_1","milk_skim","yogurt_plain","yogurt_greek","cream_light","cream_heavy"].forEach(function(k){GK[k]=Object.assign({},GK[k],{lactose:LA});});
+  GK.bread_white_home=Object.assign({},GK.bread_white_home,{lactose:"This recipe uses milk."});
+  GK.potato_mash={lactose:"Made with milk and butter."};GK.rice_pudding={lactose:"Made with milk."};
+})();
+function srcOf(food){
+  if(!food)return null;
+  if(food.src==="db")return FOOD_SRC[food.ref]||{t:"unverified",note:""};
+  if(food.src==="drink"&&food.ref==="coffee")return FOOD_SRC.coffee_black;
+  if(food.src==="off")return {t:"off",ref:food.ref?"barcode "+food.ref:"",note:""};
+  if(food.src==="custom"||food.src==="manual")return {t:"own",ref:"",note:""};
+  if(food.source)return {t:"usda",ref:"",desc:"",note:food.source};
+  return null;
+}
+function srcBadge(food){var s=srcOf(food);if(!s)return "";var T=CAT_SRC_TYPE[s.t]||CAT_SRC_TYPE.unverified;return '<span class="ev-tag '+T.cls+'">'+esc(T.short)+'</span>';}
+function srcLine(food){
+  var s=srcOf(food);if(!s)return "";var T=CAT_SRC_TYPE[s.t]||CAT_SRC_TYPE.unverified;
+  return '<p class="muted small src-line">'+srcBadge(food)+'Source: '+esc(T.label)+(s.ref?' · '+esc(s.ref):'')+(s.desc?' (“'+esc(s.desc)+'”)':'')+(s.note?'. '+esc(s.note):'')+'</p>';
+}
+function catUnits(food){
+  if(!food)return {};if(food.src==="db")return FOOD_UNITS[food.ref]||{};if(food.src==="drink"&&food.ref==="coffee")return FOOD_UNITS.coffee_black||{};
+  var sv=(food.presets||[]).filter(function(x){return x&&x[1]>0;})[0];
+  if(sv)return {serving:{g:sv[1],src:"Serving size from "+(food.src==="off"?"Open Food Facts":"your saved food")+": "+sv[0]+" = "+fmtN(sv[1])+" "+(food.unit||"g")+"."}};
+  return {};
+}
+
+/* ============================== QUICK ESTIMATE ============================== */
+/* Describe a meal in your own words. It is split into foods and amounts, each food is looked up in the
+   catalogue above (and your own foods and barcode favourites), and the same sums as the rest of the app
+   are used: grams × value per 100 g. Nothing is saved until you check it and tap Add.
+   It saves ONE normal diary entry with several items, so Today, Smart Fuel and Body Intelligence see it. */
+var QE_UNIT={
+  slice:["slice","slices","skive","skiver"],
+  piece:["piece","pieces","pc","pcs","stk","stykke","stykker"],
+  tsp:["tsp","teaspoon","teaspoons","tl","teske","teskefuld","teskefulde"],
+  tbsp:["tbsp","tablespoon","tablespoons","spsk","spiseske","spiseskefuld","spiseskefulde"],
+  g:["g","gram","grams","gr"],kg:["kg"],ml:["ml"],cl:["cl"],dl:["dl"],l:["l","liter","litre","liters","litres"],
+  glass:["glass","glasses","glas"],cup:["cup","cups","mug","mugs","kop","kopper","krus"],
+  portion:["portion","portions","serving","servings","bowl","bowls","skal","skale","tallerken","plate","plates"],
+  pat:["pat","pats","klat","klatter","knob"]
+};
+var QE_UNIT_LABEL={serving:["serving","servings"],slice:["slice","slices"],piece:["piece","pieces"],large:["large","large"],tsp:["tsp","tsp"],tbsp:["tbsp","tbsp"],glass:["glass","glasses"],cup:["cup","cups"],portion:["portion","portions"],pat:["pat","pats"]};
+var QE_WORDNUM={a:1,an:1,one:1,en:1,et:1,two:2,to:2,three:3,tre:3,four:4,fire:4,five:5,fem:5,six:6,seks:6,half:0.5,halv:0.5,halvt:0.5,"a couple":2,couple:2,par:2};
+var QE_FILLER=["of","af","the","some","lidt","noget","my","min","mit","mine","about","approx","approximately","ca","cirka","around","plain","fresh","x"];
+var QE_EACH=/\b(on each|on top of each|on both|each|per slice|per piece|pa hver|pa hvert|pa begge|hver|hvert|til hver)\b/;
+function qeIsDescription(q){q=String(q||"").trim();if(q.length<4)return false;return /\d/.test(q)&&/[a-zæøå]/i.test(q)&&!/^\d{8,14}$/.test(q.replace(/\s/g,""))||/[,+]/.test(q)||/\s(and|og|with|med)\s/i.test(q)||q.split(/\s+/).length>=4;}
+function qeUnitOf(w){for(var u in QE_UNIT){if(QE_UNIT[u].indexOf(w)>=0)return u;}return null;}
+function qeSplit(text){
+  var t=String(text||"").replace(/\r/g,"");
+  return t.split(/\s*(?:,|;|\n|\+|&|\band\b|\bog\b|\bwith\b|\bmed\b|\bplus\b)\s*/i).map(function(s){return s.trim();}).filter(function(s){return s&&!/^(and|og|with|med)$/i.test(s);});
+}
+function qeParseSeg(seg){
+  var s=norm(seg).replace(/½/g," 0.5 ").replace(/¼/g," 0.25 ").replace(/¾/g," 0.75 ").replace(/(\d),(\d)/g,"$1.$2").replace(/(\d)\s*\/\s*(\d)/g,function(m,a,b){return " "+(+a/ +b)+" ";});
+  var each=QE_EACH.test(s);s=s.replace(QE_EACH," ");
+  s=s.replace(/(\d)([a-z])/g,"$1 $2").replace(/\s+/g," ").trim();
+  var w=s.split(" "),n=null,u=null,i=0;
+  if(w[0]==="a"&&w[1]==="couple"){n=2;i=2;}
+  else if(/^\d+(\.\d+)?$/.test(w[0])){n=+w[0];i=1;if(/^0?\.\d+$/.test(w[1]||"")){n+=+w[1];i=2;}}
+  else if(QE_WORDNUM[w[0]]!=null){n=QE_WORDNUM[w[0]];i=1;if(w[1]==="half"||w[1]==="halv"){n+=0.5;i=2;}}
+  if(w[i]==="x")i++;
+  var u0=qeUnitOf(w[i]||"");if(u0){u=u0;i++;}
+  var rest=w.slice(i).filter(function(x){return x&&QE_FILLER.indexOf(x)<0;});
+  /* amount written after the food: "bread 2 slices", "milk 200 ml" */
+  if(n==null){for(var j=0;j<rest.length;j++){if(/^\d+(\.\d+)?$/.test(rest[j])){var uu=qeUnitOf(rest[j+1]||"");n=+rest[j];rest.splice(j,1);if(uu){u=uu;rest.splice(j,1);}break;}}}
+  if(rest[0]==="of"||rest[0]==="af")rest.shift();
+  return {raw:seg,n:n,u:u,each:each,words:rest.join(" ").trim()};
+}
+/* every food that Quick Estimate can match */
+function qeCandidates(){
+  var L=FOODDB.map(function(d){return {kind:"db",key:d.k,name:d.name,terms:[d.name].concat(SC.FOOD_ALIASES[d.k]||[]),src:(FOOD_SRC[d.k]||{}).t||"unverified"};});
+  DB.get(K.custom,[]).forEach(function(c){L.push({kind:"custom",id:c.id,name:c.name,terms:[c.name],src:"own"});});
+  DB.get(K.favs,[]).forEach(function(f){if(f.src==="off")L.push({kind:"fav",id:f.favId,name:f.name,terms:[f.name+(f.brand?" "+f.brand:""),f.name],src:"off"});});
+  return L;
+}
+function qeScore(words,c){
+  var text=" "+words+" ",tw=words.split(" ").filter(Boolean),best=0;
+  c.terms.forEach(function(term){
+    var t=norm(term).replace(/[()]/g," ").replace(/[^a-z0-9%.\s-]/g," ").replace(/\s+/g," ").trim();if(!t)return;
+    var sc=0;
+    if(text.indexOf(" "+t+" ")>=0)sc=100+t.length*3;                      /* whole phrase found */
+    else{var parts=t.split(" "),hit=0;parts.forEach(function(p){if(p.length>1&&tw.some(function(x){return x===p||x===p+"s"||x+"s"===p||(p.length>3&&x.indexOf(p)===0)||(x.length>3&&p.indexOf(x)===0);}))hit++;});
+      if(hit&&hit===parts.length&&parts.length>1)sc=100+t.length*3;           /* every word found, any order: "kerne rugbrød" = "Rugbrød, Kerne" */
+      else if(hit)sc=hit*20-Math.max(0,parts.length-hit)*6+Math.min(hit,tw.length)*4;}
+    if(sc>best)best=sc;
+  });
+  /* coverage: how many of your words this food explains */
+  if(best>0){var all=norm(c.terms.join(" "));best+=tw.filter(function(x){return x.length>2&&all.indexOf(x)>=0;}).length*5;}
+  return best;
+}
+function qeMatch(words){
+  if(!words)return [];
+  var C=qeCandidates(),out=[];
+  C.forEach(function(c){var sc=qeScore(words,c);if(sc>=20)out.push({c:c,sc:sc});});
+  out.sort(function(a,b){if(Math.abs(b.sc-a.sc)>=8)return b.sc-a.sc;var ra=(CAT_SRC_TYPE[a.c.src]||{rank:9}).rank,rb=(CAT_SRC_TYPE[b.c.src]||{rank:9}).rank;return ra-rb||b.sc-a.sc;});
+  return out.slice(0,6).map(function(o){return o.c;});
+}
+function qeFoodOf(c){
+  if(!c)return null;
+  if(c.kind==="db"){if(CAT_DRINK[c.key]){var b=baseDrink(CAT_DRINK[c.key]);if(b)return b;}return dbFood(c.key);}
+  if(c.kind==="custom"){var x=DB.get(K.custom,[]).filter(function(f){return f.id===c.id;})[0];if(!x)return null;var o=clone(x);o.src="custom";o.ref=x.id;o.presets=[];return o;}
+  if(c.kind==="fav"){var fv=DB.get(K.favs,[]).filter(function(f){return f.favId===c.id;})[0];if(!fv)return null;var ff=clone(fv);ff.presets=ff.presets||[];return ff;}
+  return null;
+}
+function fmtQ(n){return fmtN(Math.round(n*100)/100);}
+/* turn a count + unit into grams (or ml), and say where that number came from */
+function qeAmount(food,n,u){
+  var notes=[],unitName=food.unit,U=catUnits(food),cnt=n==null?1:n,g=null,basis="";
+  function useUnit(key,label){var x=U[key];g=cnt*x.g;basis=key;notes.push(fmtQ(cnt)+" "+(cnt===1?label[0]:label[1])+" × "+fmtN(x.g)+" "+unitName+" = "+fmtN(r1(g))+" "+unitName+". "+x.src);}
+  if(u==="g"||u==="kg"){g=cnt*(u==="kg"?1000:1);basis="g";if(food.unit==="ml")notes.push("You gave grams; counted as the same number of ml.");}
+  else if(u==="ml"||u==="cl"||u==="dl"||u==="l"){g=cnt*{ml:1,cl:10,dl:100,l:1000}[u];basis="ml";if(food.unit==="g")notes.push("Estimate: you gave a volume; counted 1 ml as 1 g.");}
+  else if(u==="tsp"||u==="tbsp"){
+    var tb=tbspOf(food),per=u==="tsp"?1/3:1;
+    if(tb){g=cnt*tb.g*per;basis=u;notes.push(fmtQ(cnt)+" "+u+" × "+fmtN(r1(tb.g*per))+" "+unitName+" = "+fmtN(r1(g))+" "+unitName+". "+(tb.src==="ml"?"1 tbsp = 15 ml, 1 tsp = 5 ml.":tb.src==="own"?"Your own tablespoon weight.":tb.std||"USDA standard tablespoon weight ("+fmtN(tb.g)+" g)."));}
+    else{g=cnt*15*per;basis=u;notes.push("Estimate: no spoon weight known for this food, so 1 tbsp is counted as 15 g. Weigh one to make it exact.");}
+  }
+  else if(u&&U[u])useUnit(u,QE_UNIT_LABEL[u]||[u,u]);
+  else if(u==="slice"&&U.piece)useUnit("piece",["slice","slices"]);
+  else if(u==="piece"&&U.slice)useUnit("slice",["piece","pieces"]);
+  else if((u==="glass"||u==="cup")&&(U.glass||U.cup))useUnit(U.glass?"glass":"cup",QE_UNIT_LABEL[U.glass?"glass":"cup"]);
+  else if(u==="pat"&&food.src==="db"&&U.pat)useUnit("pat",QE_UNIT_LABEL.pat);
+  else if(u&&U.serving&&["slice","piece","portion","glass","cup"].indexOf(u)>=0)useUnit("serving",QE_UNIT_LABEL[u]||[u,u]);
+  else if(!u&&n!=null&&n>=15){g=n;basis=food.unit;notes.push("Read “"+fmtN(n)+"” as "+fmtN(n)+" "+unitName+".");}
+  else if(!u&&Object.keys(U).length){var k0=U.piece?"piece":U.slice?"slice":Object.keys(U)[0];useUnit(k0,QE_UNIT_LABEL[k0]||[k0,k0]);}
+  else{var d=food.defQty||(food.src==="drink"?200:100);g=cnt*d;basis="portion";
+    notes.push((n==null?"No amount given. ":"")+"Estimate: "+fmtQ(cnt)+" typical portion"+(cnt===1?"":"s")+" of "+fmtN(d)+" "+unitName+". Change it if you know the amount.");}
+  if(n==null&&basis!=="portion"&&basis!==food.unit)notes.unshift("No amount given, so 1 is assumed.");
+  return {g:r1(g),unit:basis,count:cnt,notes:notes};
+}
+function qeItemFromSeg(p,baseCount){
+  var cands=qeMatch(p.words),food=qeFoodOf(cands[0]);
+  var it={id:uid(),raw:p.raw,words:p.words,n:p.n,u:p.u,each:p.each,cands:cands,food:food,notes:[],g:null,unit:null};
+  if(!food)return it;
+  var n=p.n;if(p.each&&baseCount>1){n=(n==null?1:n)*baseCount;}
+  var a=qeAmount(food,n,p.u);it.g=a.g;it.unit=a.unit;it.count=a.count;it.notes=a.notes;
+  if(p.each&&baseCount>1)it.notes.unshift("“on each” → "+fmtQ(p.n==null?1:p.n)+" × "+fmtN(baseCount)+" = "+fmtQ(n)+".");
+  if(cands.length&&p.words&&norm(cands[0].name).indexOf(p.words)<0)it.notes.unshift("Read “"+p.words+"” as "+food.name+".");
+  return it;
+}
+function qeEstimate(text){
+  var segs=qeSplit(text).map(qeParseSeg),base=1,items=[];
+  segs.forEach(function(p){
+    if(!p.words&&p.n==null)return;
+    var it=qeItemFromSeg(p,base);items.push(it);
+    if(!p.each&&p.n!=null&&p.n>=1&&p.n<15&&(p.u==="slice"||p.u==="piece"||!p.u))base=p.n;
+  });
+  return items;
+}
+function qeItemTotals(it){if(!it.food||it.g==null)return null;return portion(it.food.per100,it.g);}
+function qeTotals(items){var t={kcal:0,p:0,c:0,f:0,fib:0,miss:false,n:0};items.forEach(function(it){var p=qeItemTotals(it);if(!p)return;t.n++;NUTS.forEach(function(k){if(p[k]==null){if(k!=="fib")t.miss=true;}else t[k]+=p[k];});});return t;}
+function qeSetFood(it,c){
+  var food=qeFoodOf(c);if(!food)return;var keep=it.g!=null&&(it.unit==="g"||it.unit==="ml");
+  it.food=food;it.cands=[c].concat(it.cands.filter(function(x){return x!==c&&!(x.kind===c.kind&&(x.key||x.id)===(c.key||c.id));}));
+  if(keep){it.notes=["You chose "+food.name+"."];}
+  else{var a=qeAmount(food,it.n==null&&!it.each?null:it.count,it.u);it.g=a.g;it.unit=a.unit;it.count=a.count;it.notes=["You chose "+food.name+"."].concat(a.notes);}
+}
+/* size of one counted unit for an item (slice, piece, tsp…), with where it comes from */
+function qeUnitSize(it){
+  if(!it.food||!it.unit)return null;var U=catUnits(it.food);
+  if(U[it.unit])return {g:U[it.unit].g,src:U[it.unit].src};
+  if(it.unit==="tsp"||it.unit==="tbsp"){var tb=tbspOf(it.food),per=it.unit==="tsp"?1/3:1;
+    if(tb)return {g:r1(tb.g*per*100)/100,src:tb.src==="ml"?"1 tbsp = 15 ml, 1 tsp = 5 ml.":tb.src==="own"?"Your own tablespoon weight.":(tb.std||"USDA standard tablespoon weight.")};
+    return {g:15*per,src:"Estimate: no spoon weight known for this food, so 1 tbsp is counted as 15 g."};}
+  return null;
+}
+function qeUnitWord(it,c){var L=QE_UNIT_LABEL[it.unit]||[it.unit,it.unit];return c===1?L[0]:L[1];}
+function qeStep(it,dir){
+  var x=qeUnitSize(it);
+  if(x){var c=it.count||1;c=dir<0?(c<=1?Math.max(0.5,c-0.5):c-1):(c<1?c+0.5:c+1);it.count=c;it.g=r1(c*x.g);it.notes=[fmtQ(c)+" "+qeUnitWord(it,c)+" × "+fmtN(x.g)+" "+it.food.unit+" = "+fmtN(it.g)+" "+it.food.unit+". "+x.src];}
+  else{var st=it.g>=100?25:it.g>=20?5:1;it.g=Math.max(0,r1((it.g||0)+dir*st));it.unit=it.food.unit;it.notes=["Amount set by you."];}
+}
+function qeName(items){
+  var N=items.filter(function(i){return i.food;}).map(function(i){return shortName(i.food.name).replace(/,.*$/,"");});
+  if(!N.length)return "Quick Estimate";
+  return N.length<=3?N.join(", "):N.slice(0,3).join(", ")+" + "+(N.length-3)+" more";
+}
+function qeAfterHTML(items){
+  var day=selDay(),R=targetsForDay(day,loadFuel()),t=dayTotals(day),q=qeTotals(items);
+  var row=function(lbl,before,add,target,unit){var after=before+add;return '<tr><th>'+lbl+'</th><td>'+fmtN(Math.round(before))+'</td><td>+'+fmtN(Math.round(add))+'</td><td><b>'+fmtN(Math.round(after))+'</b></td><td>'+(target==null?'–':(target-after<-0.5?fmtN(Math.round(after-target))+' over':fmtN(Math.round(target-after))+' left'))+'</td></tr>';};
+  return '<div class="qe-after"><p class="eyebrow">How '+(day===todayISO()?'today':esc(dayLabel(day)).toLowerCase())+' changes</p><table class="qe-tab"><thead><tr><th></th><th>Now</th><th>This</th><th>After</th><th>'+(R.kcal!=null?'Target':'')+'</th></tr></thead><tbody>'
+    +row("kcal",t.kcal,q.kcal,R.kcal)+row("Protein g",t.p,q.p,R.protein)+row("Carbs g",t.c,q.c,R.carbs)+row("Fat g",t.f,q.f,R.fat)+'</tbody></table>'
+    +(R.kcal==null?'<p class="muted small">Set up your plan under Me to see what is left.</p>':'')+'</div>';
+}
+function qeItemHTML(it,i){
+  var h='<div class="sf-idea qe-item" id="qe-it-'+i+'">';
+  if(!it.food){
+    h+='<div class="sf-top"><b>Not found</b></div><p class="muted small">“'+esc(it.raw)+'” didn’t match a food. Search for it, or leave it out.</p>'
+      +'<label class="search">'+ICON.search+'<input class="qe-q" data-qeq="'+i+'" type="search" placeholder="Search foods" value="'+esc(it.words||"")+'" autocomplete="off"></label><div id="qe-sr-'+i+'">'+qeSearchHTML(it.words,i)+'</div>'
+      +'<button type="button" class="linkbtn" data-qe-del="'+i+'">Leave it out</button></div>';
+    return h;
+  }
+  var p=qeItemTotals(it),hasU=!!qeUnitSize(it);
+  h+='<div class="sf-top"><b>'+esc(it.food.name)+'</b><span class="qe-k">'+(p&&p.kcal!=null?fmtK(p.kcal)+' kcal':'– kcal')+'</span></div>'
+    +(it.raw?'<p class="muted small">From “'+esc(it.raw)+'”</p>':'')
+    +'<div class="sf-ing"><span class="n" id="qe-cnt-'+i+'">'+(hasU&&it.count?fmtQ(it.count)+' '+esc(qeUnitWord(it,it.count)):'Amount')+'</span>'
+    +'<div class="sf-step"><button type="button" class="icon-btn" data-qe-step="'+i+'" data-dir="-1" aria-label="Less">−</button><button type="button" class="icon-btn" data-qe-step="'+i+'" data-dir="1" aria-label="More">+</button></div></div>'
+    +'<div class="portion-amt qe-amt"><input class="inp" data-qeg="'+i+'" inputmode="decimal" value="'+fmtN(it.g)+'" aria-label="Amount of '+esc(it.food.name)+' in '+it.food.unit+'"><span>'+it.food.unit+'</span></div>'
+    +'<p class="sf-nut" id="qe-nut-'+i+'">'+qeNutLine(it)+'</p>'
+    +srcLine(it.food)
+    +(it.notes.length?'<ul class="qe-notes">'+it.notes.map(function(n){return '<li>'+esc(n)+'</li>';}).join('')+'</ul>':'')
+    +warningsHTML(it.food)
+    +'<div class="sf-acts"><button type="button" class="linkbtn" data-qe-swap="'+i+'">'+(it.swap?'Keep this food':'Change food')+'</button><button type="button" class="linkbtn" data-qe-del="'+i+'">Remove</button></div>';
+  if(it.swap){
+    var alts=it.cands.slice(1,6);
+    h+=(alts.length?'<p class="eyebrow">Other matches</p><div class="chips">'+alts.map(function(c,j){return '<button type="button" class="chip" data-qe-alt="'+i+'" data-j="'+(j+1)+'">'+esc(shortName(c.name))+' · '+esc((CAT_SRC_TYPE[c.src]||CAT_SRC_TYPE.unverified).short)+'</button>';}).join('')+'</div>':'')
+      +'<label class="search">'+ICON.search+'<input class="qe-q" data-qeq="'+i+'" type="search" placeholder="Search foods" value="'+esc(it.sq||"")+'" autocomplete="off"></label><div id="qe-sr-'+i+'">'+qeSearchHTML(it.sq,i)+'</div>';
+  }
+  return h+'</div>';
+}
+function qeNutLine(it){var p=qeItemTotals(it);if(!p)return "";return [["p","protein"],["c","carbs"],["f","fat"]].map(function(x){return p[x[0]]==null?x[1]+' n/a':fmtN(r1(p[x[0]]))+' g '+x[1];}).join(' · ');}
+function qeSearchHTML(q,i){
+  q=String(q||"").trim();if(!q)return "";var nq=norm(q);
+  var L=qeCandidates().filter(function(c){return c.terms.some(function(t){return norm(t).indexOf(nq)>=0;});});
+  L.sort(function(a,b){return (CAT_SRC_TYPE[a.src]||{rank:9}).rank-(CAT_SRC_TYPE[b.src]||{rank:9}).rank;});
+  APP.qeSearch=APP.qeSearch||{};APP.qeSearch[i]=L.slice(0,8);
+  if(!L.length)return '<p class="muted small">No matches. You can add the food from its label under Foods → Add your own food, then try again.</p>';
+  return L.slice(0,8).map(function(c,j){return '<button type="button" class="row" data-qe-pick="'+i+'" data-j="'+j+'"><span class="n">'+esc(c.name)+'<small>'+esc((CAT_SRC_TYPE[c.src]||CAT_SRC_TYPE.unverified).short)+'</small></span><span class="k">›</span></button>';}).join('');
+}
+function qeHTML(s){
+  var h='<p class="muted">Describe what you ate in your own words, in English or Danish. You can check and change everything before it is saved.</p>'
+    +'<textarea class="inp qe-text" id="qe-text" rows="3" placeholder="e.g. 2 slices homemade white bread, 1 tsp butter on each and 1 slice cheese on each">'+esc(s.text||"")+'</textarea>'
+    +'<button type="button" class="'+(s.items?'btn-line':'btn-main')+'" data-act="qe-run">'+(s.items?'Estimate again':'Estimate')+'</button>';
+  if(!s.items)return h+'<p class="muted small">Nutrition comes from the app\'s food list: Frida (DTU) values when they have been added, otherwise USDA FoodData Central. Foods copied from Body Fuel Lab are marked “Unverified”.</p>';
+  if(!s.items.length)return h+'<div class="note warn">Nothing to estimate yet. Write one or more foods, for example “2 eggs and a glass of milk”.</div>';
+  var q=qeTotals(s.items),bad=s.items.filter(function(i){return !i.food;}).length;
+  h+='<div class="result qe-sum"><p class="eyebrow">Estimate</p><p class="big">'+fmtK(q.kcal)+' kcal</p><p>'+fmtN(r1(q.p))+' g protein · '+fmtN(r1(q.c))+' g carbs · '+fmtN(r1(q.f))+' g fat</p>'+(bad?'<p class="muted small">'+bad+' food'+(bad===1?'':'s')+' not found and not counted.</p>':'')+(q.miss?'<p class="muted small">Some values are missing, so the real total may be a little higher.</p>':'')+'</div>';
+  h+=s.items.map(qeItemHTML).join('');
+  h+='<button type="button" class="btn-line" data-act="qe-add-line" style="align-self:flex-start">+ Add another food</button>';
+  h+=qeAfterHTML(s.items.filter(function(i){return i.food;}));
+  h+='<div><label class="lbl" for="qe-name">Name in your log</label><input class="inp" id="qe-name" value="'+esc(s.name!=null?s.name:qeName(s.items))+'"></div>';
+  h+=slotsHTML(s.slot);
+  h+='<div id="qe-err"></div><button type="button" class="btn-main" data-act="qe-save"'+(q.n?'':' disabled')+'>Add to '+esc(s.slot)+'</button>';
+  return h;
+}
+function openQE(text){var s=APP.sheet||{};openSheet({view:"qe",text:text||"",items:null,slot:s.slot||lastSlot(),from:s.view?clone(s):null});if(text)qeRun();}
+function qeRun(){var s=APP.sheet;if(!s||s.view!=="qe")return;var el=$("#qe-text");if(el)s.text=el.value;s.items=qeEstimate(s.text);s.name=null;renderSheet();}
+function qeRefreshItem(i){
+  var s=APP.sheet,it=s.items[i];if(!it)return;
+  var nut=$("#qe-nut-"+i);if(nut)nut.textContent=qeNutLine(it);
+  var box=$("#qe-it-"+i),k=box&&box.querySelector(".qe-k"),p=qeItemTotals(it);if(k)k.textContent=p&&p.kcal!=null?fmtK(p.kcal)+" kcal":"– kcal";
+  var q=qeTotals(s.items),sum=$(".qe-sum");if(sum){sum.querySelector(".big").textContent=fmtK(q.kcal)+" kcal";sum.querySelectorAll("p")[2].textContent=fmtN(r1(q.p))+" g protein · "+fmtN(r1(q.c))+" g carbs · "+fmtN(r1(q.f))+" g fat";}
+  var af=$(".qe-after");if(af)af.outerHTML=qeAfterHTML(s.items.filter(function(x){return x.food;}));
+}
+function qeSave(){
+  var s=APP.sheet;if(!s||!s.items)return null;
+  var ok=s.items.filter(function(i){return i.food&&i.g!=null&&i.g>0;});
+  if(!ok.length){$("#qe-err").innerHTML='<div class="note warn">Add at least one food with an amount above 0.</div>';return null;}
+  var D=loadDiary(),day=selDay(),past=day!==todayISO(),nm=(($("#qe-name")||{}).value||"").trim()||qeName(ok);
+  var e={id:uid(),slot:s.slot,name:nm,items:ok.map(function(i){var it=quickItem(i.food,i.g);it.qe={from:i.raw,notes:i.notes.slice(0,4)};var so=srcOf(i.food);if(so)it.srcInfo={t:so.t,ref:so.ref||""};return it;}),factor:1,src:"qe",qe:{text:s.text},at:past?null:Date.now()};
+  if(past){e.loggedAt=Date.now();e.backfilled=true;}
+  if(ok.some(function(i){return i.food.unit==="ml";}))e.drink=true; /* only the ml items count as fluids */
+  (D[day]=D[day]||[]).push(e);DB.set(K.diary,D);setUi({lastSlot:s.slot});return e;
+}
+
 /* ============================== sheet ============================== */
 function openSheet(s){APP.sheet=s;renderSheet();}
 function closeSheet(){APP.sheet=null;APP.bres="";$("#sheet-root").innerHTML="";document.body.style.overflow="";}
@@ -2791,10 +3113,11 @@ function slotsHTML(cur){return '<div class="slots" role="radiogroup" aria-label=
 function renderSheet(focus){
   var s=APP.sheet;if(!s){closeSheet();return;}
   var title="",body="",back=false;
-  if(s.view==="log"){title="Log food or drink";body=slotsHTML(s.slot)+'<label class="search">'+ICON.search+'<input id="s-q" type="search" placeholder="Search food, drink or barcode" value="'+esc(s.q||"")+'" autocomplete="off" aria-label="Search food, drink or barcode"></label><div id="s-res" class="res">'+foodsListHTML(s.q,"s")+'</div>';}
+  if(s.view==="log"){title="Log food or drink";body=slotsHTML(s.slot)+'<button type="button" class="row qe-row" data-act="qe-open"><span class="n">✎ Quick Estimate<small>Describe a meal in your own words</small></span><span class="k">›</span></button><label class="search">'+ICON.search+'<input id="s-q" type="search" placeholder="Search food, drink or barcode" value="'+esc(s.q||"")+'" autocomplete="off" aria-label="Search food, drink or barcode"></label><div id="s-res" class="res">'+foodsListHTML(s.q,"s")+'</div>';}
   else if(s.view==="portion"){title=s.food.name;back=!!s.from;body=portionHTML(s);}
   else if(s.view==="manual"){title="Enter label values";back=!!s.from;body=manualHTML(s);}
   else if(s.view==="calendar"){title="Choose a date";body=calendarHTML();}
+  else if(s.view==="qe"){title="Quick Estimate";back=!!s.from;body=qeHTML(s);}
   else if(s.view==="smartfuel"){title="Smart Fuel";body=smartFuelSheetHTML(s);}
   else if(s.view==="phase"){title="My Nutrition Phase";body=phaseSheetHTML(s);}
   else if(s.view==="insights"){title="All insights";body=insightsSheetHTML();}
@@ -2827,7 +3150,7 @@ function warningsHTML(food){
 function portionHTML(s){
   var food=s.food,ml=food.unit==="ml",fav=isFav(food);
   var chips=(food.presets||[]).map(function(p){return [/\d\s*(g|ml)\b/.test(p[0])?p[0]:p[0]+' · '+fmtN(p[1])+' '+food.unit,p[1]];}).concat(ml?[["150 ml",150],["200 ml",200],["250 ml",250],["500 ml",500]]:[["25 g",25],["50 g",50],["100 g",100],["150 g",150]]);
-  return '<p class="muted">'+esc((food.brand?food.brand+' · ':'')+per100Line(food))+'</p>'
+  return '<p class="muted">'+esc((food.brand?food.brand+' · ':'')+per100Line(food))+'</p>'+srcLine(food)
     +'<div class="portion-amt"><input class="inp" id="p-qty" inputmode="decimal" value="'+fmtN(s.qty)+'" aria-label="Amount in '+food.unit+'"><span>'+food.unit+'</span><span class="eq" id="p-eq">'+esc(spoonEq(food,s.qty))+'</span></div>'
     +'<div class="chips">'+chips.map(function(c){return '<button type="button" class="chip'+(r1(s.qty)===r1(c[1])?' on':'')+'" data-q="'+c[1]+'">'+esc(c[0])+'</button>';}).join('')+'</div>'
     +spoonHTML(s)
@@ -2847,7 +3170,7 @@ function manualHTML(s){
 }
 function editHTML(e,s){
   var x=entryTotals(e);
-  var h=e.items.map(function(it,j){return '<div><label class="lbl" for="e-q-'+j+'">'+esc(it.name)+'</label><div class="portion-amt"><input class="inp" id="e-q-'+j+'" data-eq="'+j+'" inputmode="decimal" value="'+fmtN(r1(it.qty*(e.factor||1)))+'"><span>'+it.unit+'</span></div></div>';}).join('');
+  var h=(e.qe&&e.qe.text?'<p class="muted small">Quick Estimate from “'+esc(e.qe.text)+'”</p>':'')+e.items.map(function(it,j){return '<div><label class="lbl" for="e-q-'+j+'">'+esc(it.name)+'</label><div class="portion-amt"><input class="inp" id="e-q-'+j+'" data-eq="'+j+'" inputmode="decimal" value="'+fmtN(r1(it.qty*(e.factor||1)))+'"><span>'+it.unit+'</span></div>'+(e.src==="qe"?srcLine(it):'')+'</div>';}).join('');
   h+='<div class="result">'+'<p class="big">'+(x.miss&&x.miss.kcal&&!x.kcal?'– kcal':fmtK(x.kcal)+' kcal')+'</p><p>'+[["p","protein"],["c","carbs"],["f","fat"]].map(function(m){return x.miss&&x.miss[m[0]]&&!x[m[0]]?m[1]+' n/a':fmtN(r1(x[m[0]]))+' g '+m[1];}).join(' · ')+'</p></div>';
   h+=e.items.map(function(it){return warningsHTML(it);}).join('');
   h+=slotsHTML(s.slot||e.slot);
@@ -2896,7 +3219,15 @@ document.addEventListener("click",function(ev){
   if(t.hasAttribute("data-again")){var r=(APP.again||[])[+t.getAttribute("data-again")];if(r){var sl=slotForType("auto"),e=addToDay(r.food,r.qty,sl,r.spoon);render();toast("Added to "+sl,function(){removeEntry(e.id);render();toast("Removed");});}return;}
   if(t.hasAttribute("data-note")){openSheet({view:"note",id:t.getAttribute("data-note")});return;}
   if(t.hasAttribute("data-edit")){var en=findEntry(t.getAttribute("data-edit"));if(en)openSheet({view:"edit",id:en.id,slot:en.slot});return;}
-  if(t.hasAttribute("data-slot")&&s){s.slot=t.getAttribute("data-slot");document.querySelectorAll("[data-slot]").forEach(function(b){var on=b===t;b.classList.toggle("on",on);b.setAttribute("aria-checked",on);});var ab=$('[data-act="add"]');if(ab)ab.textContent="Add to "+s.slot;return;}
+  if(t.hasAttribute("data-slot")&&s){s.slot=t.getAttribute("data-slot");document.querySelectorAll("[data-slot]").forEach(function(b){var on=b===t;b.classList.toggle("on",on);b.setAttribute("aria-checked",on);});var ab=$('[data-act="add"]')||$('[data-act="qe-save"]');if(ab)ab.textContent="Add to "+s.slot;return;}
+  if(s&&s.view==="qe"){
+    var qeR=function(){var b=$(".sheet-body"),y=b?b.scrollTop:0;var ta=$("#qe-text");if(ta)s.text=ta.value;var nmI=$("#qe-name");if(nmI)s.name=nmI.value;renderSheet();var b2=$(".sheet-body");if(b2)b2.scrollTop=y;};
+    if(t.hasAttribute("data-qe-step")){var si=s.items[+t.getAttribute("data-qe-step")];if(si&&si.food){qeStep(si,+t.getAttribute("data-dir"));qeR();}return;}
+    if(t.hasAttribute("data-qe-del")){s.items.splice(+t.getAttribute("data-qe-del"),1);if(s.name!=null&&s.name===qeName(s.items))s.name=null;qeR();return;}
+    if(t.hasAttribute("data-qe-swap")){var sw=s.items[+t.getAttribute("data-qe-swap")];if(sw){sw.swap=!sw.swap;qeR();}return;}
+    if(t.hasAttribute("data-qe-alt")){var ai=s.items[+t.getAttribute("data-qe-alt")],ac=ai&&ai.cands[+t.getAttribute("data-j")];if(ac){qeSetFood(ai,ac);ai.swap=false;s.name=null;qeR();}return;}
+    if(t.hasAttribute("data-qe-pick")){var pi=+t.getAttribute("data-qe-pick"),pit=s.items[pi],pc=((APP.qeSearch||{})[pi]||[])[+t.getAttribute("data-j")];if(pit&&pc){if(!pit.food){pit.cands=[pc];var pf=qeFoodOf(pc);if(pf){pit.food=pf;var pa=qeAmount(pf,pit.n,pit.u);pit.g=pa.g;pit.unit=pa.unit;pit.count=pa.count;pit.notes=["You chose "+pf.name+"."].concat(pa.notes);}}else qeSetFood(pit,pc);pit.swap=false;pit.sq="";s.name=null;qeR();}return;}
+  }
   if(t.hasAttribute("data-db")){openPortion(dbFood(t.getAttribute("data-db")),null);var d_=APP.sheet;d_.qty=d_.food.defQty||100;renderSheet();return;}
   if(t.hasAttribute("data-own")){var c=DB.get(K.custom,[]).filter(function(x){return x.id===t.getAttribute("data-own");})[0];if(c){var fo=clone(c);fo.src="custom";fo.ref=c.id;fo.presets=[];openPortion(fo,fo.unit==="ml"?250:100);}return;}
   if(t.hasAttribute("data-fav")){var fv=DB.get(K.favs,[]).filter(function(x){return x.favId===t.getAttribute("data-fav");})[0];if(fv){var ff=clone(fv);if(ff.src==="db"){var dd=dbFood(ff.ref,ff.state);if(dd)ff=dd;}ff.presets=ff.presets||[];openPortion(ff,ff.defQty||(ff.unit==="ml"?250:100));}return;}
@@ -2907,6 +3238,11 @@ document.addEventListener("click",function(ev){
   if(t.hasAttribute("data-unit")&&s){s.unit=t.getAttribute("data-unit");document.querySelectorAll("[data-unit]").forEach(function(b){b.classList.toggle("on",b===t);});return;}
   switch(a){
     case "log":openLog();break;
+    case "qe-open":openQE("");break;
+    case "qe-open-q":openQE((s&&s.view==="log"?s.q:APP.fq)||"");break;
+    case "qe-run":qeRun();break;
+    case "qe-add-line":if(s&&s.items){var ta2=$("#qe-text");if(ta2)s.text=ta2.value;s.items.push({id:uid(),raw:"",words:"",n:null,u:null,each:false,cands:[],food:null,notes:[],g:null,unit:null});renderSheet();var nq2=document.querySelectorAll(".qe-q");if(nq2.length)nq2[nq2.length-1].focus();}break;
+    case "qe-save":var qe_=qeSave();if(qe_){var qsl=s.slot,qday=selDay();closeSheet();if(APP.tab!=="today")APP.tab="today";render();toast("Added to "+qsl,function(){var D4=loadDiary();D4[qday]=(D4[qday]||[]).filter(function(x){return x.id!==qe_.id;});DB.set(K.diary,D4);render();toast("Removed");});}break;
     case "spoon-edit":if(s){s.spoonEdit=!s.spoonEdit;renderSheet(s.spoonEdit?"#sp-g":null);}break;
     case "spoon-save":var sg=num(($("#sp-g")||{}).value);if(sg==null||sg<1||sg>60){toast("Enter a weight between 1 and 60 g");break;}var SP=DB.get(K.spoons,{});SP[itemRef(s.food)]=r1(sg);DB.set(K.spoons,SP);s.spoonEdit=false;renderSheet();toast("Saved: 1 tbsp = "+fmtN(r1(sg))+" g");break;
     case "close":closeSheet();break;
@@ -2953,6 +3289,10 @@ document.addEventListener("click",function(ev){
 document.addEventListener("input",function(ev){
   var t=ev.target,s=APP.sheet;
   if(t.id==="s-q"&&s){s.q=t.value;APP.bres="";$("#s-res").innerHTML=foodsListHTML(t.value,"s");return;}
+  if(t.id==="qe-text"&&s){s.text=t.value;return;}
+  if(t.id==="qe-name"&&s){s.name=t.value;return;}
+  if(t.hasAttribute&&t.hasAttribute("data-qeq")&&s&&s.items){var qi=+t.getAttribute("data-qeq"),qit=s.items[qi];if(qit){if(qit.food)qit.sq=t.value;else qit.words=t.value;var sr=$("#qe-sr-"+qi);if(sr)sr.innerHTML=qeSearchHTML(t.value,qi);}return;}
+  if(t.hasAttribute&&t.hasAttribute("data-qeg")&&s&&s.items){var gi=+t.getAttribute("data-qeg"),git=s.items[gi],gv=num(t.value);if(git&&gv!=null&&gv>=0){git.g=gv;var us=qeUnitSize(git);if(us&&Math.abs(gv/us.g-Math.round(gv/us.g*2)/2)<1e-6){git.count=Math.round(gv/us.g*2)/2;}else{git.unit=git.food.unit;git.count=null;}git.notes=["Amount set by you: "+fmtN(gv)+" "+git.food.unit+"."];var cn=$("#qe-cnt-"+gi);if(cn)cn.textContent=(qeUnitSize(git)&&git.count?fmtQ(git.count)+" "+qeUnitWord(git,git.count):"Amount");qeRefreshItem(gi);}return;}
   if(t.id==="f-q"){APP.fq=t.value;APP.bres="";$("#f-res").innerHTML=foodsListHTML(t.value,"f");return;}
   if(t.id==="n-text"){setUi({noteDraft:t.value});return;}
   if(t.id==="p-qty"&&s){s.qty=num(t.value);s.spoon=null;$("#p-res").innerHTML=resultHTML(s.food,s.qty);$("#p-eq").textContent=spoonEq(s.food,s.qty);document.querySelectorAll("[data-q]").forEach(function(b){b.classList.toggle("on",s.qty!=null&&r1(+b.getAttribute("data-q"))===r1(s.qty));});return;}
@@ -2972,7 +3312,7 @@ applyTheme();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{qeEstimate:qeEstimate,qeTotals:qeTotals,qeSave:qeSave,openQE:openQE,dayTotals:dayTotals,FOOD_SRC:FOOD_SRC,FOODDB:FOODDB,dbFood:dbFood,sfFood:sfFood,baseDrink:baseDrink,searchResults:searchResults,APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 
