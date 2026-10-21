@@ -21,10 +21,12 @@
 - Drinks count towards your fluids for the day.
 
 **Quick Estimate**
-- Describe a meal in your own words, in English or Danish, for example "2 slices homemade white bread, 1 tsp butter on each and 1 slice cheese on each".
-- The app splits it into foods and amounts, shows every assumption (like "1 slice = 42 g") and where each value comes from.
-- You can change amounts, swap or remove foods, and add more before anything is saved.
-- It saves one normal entry in your log, so Today, Smart Fuel and Body Intelligence all include it.
+- Describe a meal in your own words, in English or Danish.
+- **If you include the nutrition** (for example "650 kcal, 38 g protein, 43 g carbs, 36 g fat", or "energi 650 kcal, protein 38,5 g, kulhydrat 43 g, fedt 36 g"), those numbers are used exactly as given. No food matching, nothing added on top. A 4/4/9 check warns if the numbers don't add up, but never changes them.
+- **If you include only some numbers**, the ones you gave are kept and the missing ones are marked. They are only filled in if you type them or tap "Calculate".
+- **If you include no numbers**, each food is matched in the food list. Amounts you didn't give are marked "Assumed amount", and a rough range and confidence level are shown. Foods that aren't found must be picked, given values, or left out before you can save.
+- Everything can be changed before saving. Nothing is saved until you tap **Add to Today's Intake**, and a double tap can't add the meal twice.
+- Quick Estimate matches words against a fixed food list. It is not an AI and can misread unusual descriptions, so always check the result.
 
 **Foods**
 - Search one food list in English or Danish. Every food shows its source.
