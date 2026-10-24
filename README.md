@@ -20,6 +20,15 @@
 - Today's log is grouped by breakfast, lunch, dinner and snacks.
 - Drinks count towards your fluids for the day.
 
+**Smart Fuel Coach** (on Today, right under your calories and macros)
+- Pick today's activity (strength, walking / incline treadmill, rest, other). It's the same activity Body Intelligence uses, so you enter it once.
+- **Help me choose what to eat:** optional taps for how you feel and when you last ate, then plain guidance (for example whether a snack before a walk makes sense) and 2–4 food ideas with portions, calories, protein, carbs and fat calculated from the food list and your Food Library.
+- **Plan my remaining meals:** splits what's left today across the meals you still expect, with editable amounts. Going over is marked, never blocked.
+- Confirmed allergies, diagnosed intolerances and foods you prefer to avoid are never suggested; suspected sensitivities get a note.
+- Your targets never change on their own. Nothing is logged unless you tap "Log this meal…" and then "Add to Today's Intake".
+- It uses fixed, transparent rules and your own data. It is not an AI and not medical advice.
+- The earlier ideas, My Kitchen and saved ideas are under "Snack ideas & My Kitchen" in the same card.
+
 **Quick Estimate**
 - Describe a meal in your own words, in English or Danish.
 - **If you include the nutrition** (for example "650 kcal, 38 g protein, 43 g carbs, 36 g fat", or "energi 650 kcal, protein 38,5 g, kulhydrat 43 g, fedt 36 g"), those numbers are used exactly as given. No food matching, nothing added on top. A 4/4/9 check warns if the numbers don't add up, but never changes them.

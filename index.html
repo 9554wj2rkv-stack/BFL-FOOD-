@@ -16,6 +16,7 @@
   Three tabs: Today, Foods, Me. Data keys (bflfood_*) are the same as version 1, so logged food,
   your plan, food profile, favourites, own foods and weight check-ins carry over.
   The engine (calculations, food list, barcode lookup, safety checks) is copied unchanged.
+  Oct 2026: Smart Fuel Coach on Today (rule-based guidance, meal planning and suggestions; never logs on its own).
   Oct 2026: Save new product → Food Library (same storage as your own foods, bflfood_customfoods).
   Oct 2026: one unified food catalogue with a source on every food (Frida preferred, USDA FoodData Central
   as fallback, original Body Fuel Lab foods marked "Unverified"), plus Quick Estimate. No live Frida connection.
@@ -227,6 +228,20 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .sf-av button{min-height:40px;font-size:15px}
 .sf-saved{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:4px}
 /* evidence */
+.co-q{display:flex;flex-direction:column;gap:8px}
+.co-acts .chip{font-size:15px}
+.co-guide{border:1.5px solid var(--line-2);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.co-head{font-size:18px;font-weight:700;line-height:1.4;color:var(--ink)}
+.co-saved{font-size:15px;font-weight:700;color:var(--ok);min-height:20px;margin:-4px 0}
+.co-for{margin:4px 0 -6px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-size:13px}
+.co-alloc{display:flex;flex-direction:column}
+.co-row{display:flex;align-items:center;gap:12px;border-top:1px solid var(--line);padding:10px 0}
+.co-row .n{flex:1;min-width:0;font-size:17px;font-weight:700}
+.co-row .n small{display:block;font-size:14px;color:var(--muted);font-weight:500}
+.co-k{width:130px;flex:none}
+.co-k .inp{text-align:right;font-size:18px;font-weight:700}
+.co-total{font-size:16px;color:var(--ink-2)}
+.co-over{color:var(--warn)}
 .pf-lbl{display:block;font-size:15px;font-weight:700;color:var(--ink-2);margin-bottom:6px}
 .pf-wrap{display:flex;align-items:center;gap:8px}
 .pf-wrap .inp{flex:1;min-width:0}
@@ -2704,7 +2719,7 @@ function whyFits(T,R){
 }
 function leftTxt(v,u){return v>=0?fmtN(v)+" "+u+" left":fmtN(-v)+" "+u+" over";}
 /* ----- rendering ----- */
-function smartFuelCardHTML(){
+function smartFuelCardHTML_v1(){ /* replaced by Smart Fuel Coach (below); kept for reference */
   var open=ui().sfOpen!==false,k=loadKitchen().items.filter(function(x){return x.available===true;}).length,n=loadIdeas().length;
   return '<section class="card sf-card" aria-label="Smart Fuel"><button type="button" class="bi-head sf-head" data-sf-toggle aria-expanded="'+open+'"><span><b>Smart Fuel</b>'+(open?'<small>Ideas based on your nutrition and your kitchen.</small>':'')+'</span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" class="bi-chev'+(open?' up':'')+'"><path d="M6 9l6 6 6-6"/></svg></button>'
     +(open?'<div class="sf-body"><button type="button" class="btn-main" data-sf-open>What could I eat?</button><p class="muted small">My Kitchen: '+k+' available · '+n+' saved idea'+(n===1?'':'s')+'. Ideas are never logged for you.</p></div>':'')+'</section>';
@@ -2811,6 +2826,330 @@ document.addEventListener("click",function(ev){
 document.addEventListener("input",function(ev){var t=ev.target,s=APP.sheet;if(t.id==="sf-kq"&&s&&s.view==="smartfuel"){s.kq=t.value;s.openKitchen=true;renderSheet("#sf-kq");}});
 document.addEventListener("toggle",function(ev){var d=ev.target,s=APP.sheet;if(!s||s.view!=="smartfuel"||!d||!d.id)return;if(d.id==="sf-kitchen")s.openKitchen=d.open;if(d.id==="sf-saved")s.openSaved=d.open;},true);
 
+
+/* ============================== SMART FUEL COACH ============================== */
+/* A transparent, rule-based helper (not an AI). It READS: today's targets and diary (the same numbers as the Today card),
+   your food profile, your Food Library, the food list, and Body Intelligence check-ins. It never writes to the diary:
+   a suggestion only becomes food in your log after "Log this meal" → review → "Add to Today's Intake".
+   Storage:
+   - Activity for a date is the SAME field Body Intelligence uses (bflfood_progress, act), so it is entered once.
+   - Everything else the coach asks is kept per date in bflfood_coach_v1:
+     {"YYYY-MM-DD":{feel:[], last:"", dur:"", inten:"", time:"", meals:[], edited:{}, at:…}}
+   Your calorie and macro targets are never changed by the coach. */
+K.coach="bflfood_coach_v1";
+GK.pasta=Object.assign({},GK.pasta,{gluten:"Pasta is usually made with wheat."}); /* food-profile knowledge for a catalogue food */
+var CO_ACTS=[["strength","Strength training"],["cardio","Walking / incline treadmill"],["rest","Rest / recovery"],["other","Other activity"]];
+var CO_FEEL=[["good","Good energy, not hungry"],["hungry","Hungry"],["low","Low energy"],["tired","Tired / recovering"],["unwell","Feeling unwell"]];
+var CO_LAST=[["lt2","Within 2 hours"],["2to4","2–4 hours ago"],["gt4","More than 4 hours ago"],["unsure","Not sure"]];
+var CO_INT=[["easy","Easy"],["moderate","Moderate"],["hard","Hard"]];
+var CO_MEALS=[["pre","Pre-training snack"],["snack","Snack"],["dinner","Dinner"],["evening","Evening snack"],["other","Other"]];
+var CO_W={snack:0.2,dinner:0.6,evening:0.2,other:0.25};
+function coAll(){var c=DB.get(K.coach,{});return c&&typeof c==="object"&&!Array.isArray(c)?c:{};}
+function coDay(day){var c=coAll()[day]||{};return {feel:Array.isArray(c.feel)?c.feel:[],last:c.last||"",dur:c.dur||"",inten:c.inten||"",time:c.time||"",meals:Array.isArray(c.meals)?c.meals:null,edited:c.edited&&typeof c.edited==="object"?c.edited:{},at:c.at||null};}
+function coSet(day,patch){var A=coAll(),d=A[day]||{};Object.keys(patch).forEach(function(k){d[k]=patch[k];});d.at=Date.now();A[day]=d;DB.set(K.coach,A);}
+function coActs(day){return dayCtx(day).act||[];}
+function coSetActs(day,acts){setDayCtx(day,{act:acts});}
+/* last food logged on that day (water and plain sparkling water don't count) */
+function coLastLogged(day){
+  var es=(loadDiary()[day]||[]).filter(function(e){return e.at&&!(e.items||[]).every(function(it){return it.src==="drink"&&(it.ref==="water"||it.ref==="sparkling");});});
+  if(!es.length)return null;var t=Math.max.apply(null,es.map(function(e){return e.at;}));return {at:t,h:(Date.now()-t)/3600000};
+}
+/* everything the rules need, in one object */
+function coState(day){
+  var c=coDay(day),acts=coActs(day),ctx=dayCtx(day),R=sfRemaining(day),isT=day===todayISO(),feel={},src={};
+  c.feel.forEach(function(f){feel[f]=true;});
+  /* reuse a Body Intelligence check-in when nothing was chosen here (never written back) */
+  if(!c.feel.length){
+    if(ctx.energy!=null&&ctx.energy<=2){feel.low=true;src.low="energy "+ctx.energy+"/5";}
+    if(ctx.hunger!=null&&ctx.hunger>=4){feel.hungry=true;src.hungry="hunger "+ctx.hunger+"/5";}
+    if(ctx.recovery!=null&&ctx.recovery<=2){feel.tired=true;src.tired="recovery "+ctx.recovery+"/5";}
+    if(!feel.low&&!feel.hungry&&!feel.tired&&ctx.energy!=null&&ctx.energy>=4&&ctx.hunger!=null&&ctx.hunger<=2){feel.good=true;src.good="energy "+ctx.energy+"/5, hunger "+ctx.hunger+"/5";}
+  }
+  var last=c.last,lastSrc="you";
+  if(!last&&isT){var L=coLastLogged(day);if(L){last=L.h<2?"lt2":L.h<=4?"2to4":"gt4";lastSrc="log";}}
+  var mins=null;if(isT&&c.time&&/^\d{1,2}:\d{2}$/.test(c.time)){var p=c.time.split(":"),now=new Date(),tt=new Date();tt.setHours(+p[0],+p[1],0,0);mins=Math.round((tt-now)/60000);}
+  return {day:day,isT:isT,c:c,acts:acts,ctx:ctx,R:R,feel:feel,feelSrc:src,last:last,lastSrc:lastSrc,minsToTraining:mins,dur:num(c.dur),inten:c.inten,
+    training:acts.indexOf("strength")>=0||acts.indexOf("cardio")>=0||acts.indexOf("other")>=0};
+}
+/* ---------- the rules (deterministic; every message comes from one of these lines) ---------- */
+function coGuidance(S){
+  var g={head:"",points:[],preSnack:false,lean:null},a=S.acts,f=S.feel,R=S.R;
+  var str=a.indexOf("strength")>=0,walk=a.indexOf("cardio")>=0,rest=a.indexOf("rest")>=0,other=a.indexOf("other")>=0;
+  var hungry=!!f.hungry,low=!!f.low,tired=!!f.tired,good=!!f.good,longAgo=S.last==="gt4",recent=S.last==="lt2";
+  var hard=S.inten==="hard"||(S.dur!=null&&S.dur>=75),soon=S.minsToTraining!=null&&S.minsToTraining>=0&&S.minsToTraining<=180,after=S.minsToTraining!=null&&S.minsToTraining<-((S.dur||45));
+  if(f.unwell){
+    g.head="Consider rest or lighter activity. Focus on recovery, hydration and eating adequately.";
+    if(str||walk||other)g.points.push("Hard training isn’t a good idea while you feel unwell. A gentle walk is fine only if you feel up to it.");
+    g.points.push("Eat what you can manage and tolerate. Regular meals and fluids help recovery more than hitting exact numbers today.");
+    g.points.push("If symptoms are severe or don’t improve, contact a doctor.");
+    g.lean="gentle";return g;
+  }
+  if(!a.length){g.head="Choose today’s activity above for more specific guidance.";}
+  else if(walk&&!str){
+    if(hungry||low||longAgo){g.head="A small, easily tolerated snack before walking may help. Here are some options from your foods.";g.preSnack=true;
+      if(longAgo)g.points.push("It’s been more than 4 hours since you last ate.");}
+    else if(good&&!hungry){g.head="You probably don’t need an extra snack before a comfortable walk. You can eat afterwards according to hunger and your remaining daily needs.";}
+    else g.head="Most people don’t need to eat before an easy walk. If you get hungry, a small snack is fine.";
+    if(hard&&!g.preSnack)g.points.push("For a long or hard session, a small carbohydrate snack beforehand can make it feel easier.");
+  }
+  else if(str){
+    g.head="Consider your training time, last meal and hunger. Adequate energy and protein throughout the day support strength and recovery.";
+    if(after)g.points.push("Training is done for today. A meal with protein and some carbohydrate is a good choice when you’re hungry.");
+    else if(longAgo||hungry||low){g.preSnack=true;g.points.push(soon?"Training is coming up and "+(longAgo?"your last meal was more than 4 hours ago":hungry?"you’re hungry":"your energy is low")+". A small snack with carbohydrate and some protein can help.":"If you train within the next few hours, a small snack with carbohydrate and some protein can help, because "+(longAgo?"your last meal was more than 4 hours ago.":hungry?"you’re hungry.":"your energy is low."));}
+    else if(recent)g.points.push("You ate recently, so you’re probably fuelled for training.");
+    if(tired)g.points.push("You feel tired or recovering. Adequate protein and overall energy help; an easier session is also fine.");
+  }
+  else if(rest){
+    g.head="You don’t need special workout fuel today. Regular meals, adequate protein and overall energy intake still matter for recovery.";
+    if(tired)g.points.push("Feeling tired is a good reason to eat regular meals today rather than skip them.");
+  }
+  else if(other){g.head="Eat according to your hunger and your remaining needs. If the activity is long or hard, a small carbohydrate snack beforehand can help.";if(hungry||longAgo)g.preSnack=true;}
+  if(walk&&str&&!g.preSnack&&(hungry||longAgo))g.preSnack=true;
+  /* what's left today */
+  if(R.ok){
+    if(R.k<=0)g.points.push("You’ve reached today’s calorie target"+(R.k<0?" (about "+fmtN(-R.k)+" kcal over)":"")+". That’s fine. If you’re genuinely hungry, eat — protein-rich, filling options are listed first.");
+    else{if(R.p>=25)g.points.push("You have "+fmtN(R.p)+" g protein left, so options with protein are listed first.");
+      if(R.f<=10)g.points.push("Your fat allowance is nearly used ("+(R.f<0?fmtN(-R.f)+" g over":fmtN(R.f)+" g left")+"), so lower-fat options come first. Going a few grams over isn’t harmful.");
+      if(!hungry&&R.k>0)g.points.push("If you’re not hungry, you don’t need to eat everything that’s left just to reach the number.");}
+  } else g.points.push("Set up your daily targets in Me to get guidance based on what you have left.");
+  if(hungry&&R.ok&&R.k<150&&R.k>0)g.points.push("You’re hungry with little left. A filling, protein-rich choice is better than going without.");
+  return g;
+}
+/* ---------- meal templates: portions in grams, all values come from the food list ---------- */
+var CO_T=[
+  {id:"chick_rice",name:"Chicken and rice",kind:"meal",items:[["db","chicken_breast_roast",120],["db","rice_white",150],["db","broccoli",100]],why:"protein-focused and low in fat"},
+  {id:"cod_pot",name:"Cod with potatoes and cauliflower",kind:"meal",items:[["db","cod",150],["db","potato_skin",200],["db","cauliflower",100]],why:"lean protein with potatoes for carbohydrate"},
+  {id:"salmon_pot",name:"Salmon with potatoes and broccoli",kind:"meal",items:[["db","salmon_farmed",125],["db","potato_skin",200],["db","broccoli",100]],why:"protein with some healthy fat"},
+  {id:"pork_pot",name:"Pork loin, potatoes and red cabbage",kind:"meal",items:[["db","pork_loin",110],["db","potato_skin",200],["db","red_cabbage",75],["db","gravy",60]],why:"a classic Danish dinner"},
+  {id:"pasta_beef",name:"Pasta with beef mince and tomato",kind:"meal",items:[["db","pasta",180],["db","beef_mince_85",100],["db","tomato",100]],why:"carbohydrate and protein together"},
+  {id:"plaice_mash",name:"Plaice with mashed potatoes",kind:"meal",items:[["db","plaice",127],["db","potato_mash",200],["db","carrot_raw",80]],why:"light fish with a filling side"},
+  {id:"yog_berries",name:"Greek yoghurt with blueberries",kind:"snack",items:[["db","yogurt_greek",150],["db","blueberries",100]],why:"protein in a small snack",fix:true},
+  {id:"rug_egg",name:"Rugbrød with boiled egg",kind:"snack",items:[["db","rugbrod",40],["db","egg_boiled",50]],why:"fibre and some protein",fix:true},
+  {id:"rug_cottage",name:"Rugbrød with cottage cheese",kind:"snack",items:[["db","rugbrod",40],["db","cottage_cheese",75]],why:"protein with little fat",fix:true},
+  {id:"porridge",name:"Oatmeal porridge with milk",kind:"snack",items:[["db","oatmeal",250],["db","milk_2",100]],why:"warm and filling",fix:true},
+  {id:"milk_glass",name:"Glass of milk",kind:"snack",items:[["db","milk_2",200]],why:"protein and fluid",fix:true},
+  {id:"crisp_cheese",name:"Crispbread with cheese",kind:"snack",items:[["db","crispbread",22],["db","cheese_gouda",20]],why:"crunchy and quick",fix:true},
+  {id:"banana",name:"Banana",kind:"pre",items:[["db","banana",118]],why:"easy to digest carbohydrate",fix:true},
+  {id:"apple",name:"Apple",kind:"pre",items:[["db","apple",180]],why:"light and easy before activity",fix:true},
+  {id:"cakes_honey",name:"Rice cakes with honey",kind:"pre",items:[["db","rice_cakes",18],["db","honey",7]],why:"quick carbohydrate, almost no fat",fix:true},
+  {id:"rug_jam",name:"Rugbrød with jam",kind:"pre",items:[["db","rugbrod",40],["db","jam",15]],why:"carbohydrate with little fat",fix:true}
+];
+function coFood(it){if(it[0]==="db")return dbFood(it[1]);if(it[0]==="own"){var r=libGet(it[1]);return r?ownFood(r):null;}return null;}
+/* Food Library products become snack options at their serving size (or 100 g / 100 ml) */
+function coLibTemplates(){
+  return libAll().filter(function(r){var p=r.per100||{};return !r.drinkKind&&p.kcal!=null&&p.p!=null&&p.c!=null&&p.f!=null;}).map(function(r){
+    var g=r.serving&&r.serving.g>0?r.serving.g:100;return {id:"lib_"+r.id,name:r.name+(r.brand?" ("+r.brand+")":""),kind:(r.per100.kcal*g/100)<=350?"snack":"meal",items:[["own",r.id,g]],why:"from your Food Library",fix:true,lib:true};});
+}
+/* totals, profile check and source labels for one suggestion at a given scale */
+function coEval(t,scale){
+  var o={t:t,items:[],kcal:0,p:0,c:0,f:0,missing:[],exclude:[],caution:[],srcs:{}};
+  t.items.forEach(function(it){
+    var food=coFood(it);if(!food||!food.per100||["kcal","p","c","f"].some(function(k){return food.per100[k]==null;})){o.missing.push(food?food.name:it[1]);return;}
+    var g=t.fix?it[2]:Math.max(5,Math.round(it[2]*scale/5)*5),pn=portion(food.per100,g);
+    o.items.push({food:food,g:g});["kcal","p","c","f"].forEach(function(k){o[k]+=pn[k];});
+    var ck=sfCheck(food);ck.exclude.forEach(function(x){o.exclude.push(food.name+": "+x);});ck.caution.forEach(function(x){o.caution.push(food.name+": "+x);});
+    var s=srcOf(food);if(s)o.srcs[(CAT_SRC_TYPE[s.t]||CAT_SRC_TYPE.unverified).short]=1;
+  });
+  return o;
+}
+/* pick suggestions for one eating occasion of about `target` kcal. Missing data or a food-profile exclusion removes an option. */
+function coSuggest(kind,target,S,n,skip){
+  var R=S.R,L=CO_T.concat(coLibTemplates()).filter(function(t){return kind==="pre"?t.kind==="pre"||(t.kind==="snack"&&t.lib):kind==="meal"?t.kind==="meal":t.kind!=="meal";});
+  var out=[],notes={excluded:[],missing:0};
+  L.forEach(function(t){
+    if(skip&&skip.indexOf(t.id)>=0)return;
+    var base=coEval(t,1),scale=1;
+    if(!t.fix&&target>0&&base.kcal>0)scale=Math.max(0.6,Math.min(1.6,target/base.kcal));
+    var e=scale===1?base:coEval(t,scale);
+    if(e.missing.length){notes.missing++;return;}
+    if(e.exclude.length){notes.excluded.push(e.exclude[0]);return;}
+    var sc=0;
+    if(target>0)sc-=Math.abs(e.kcal-target)/target*3;
+    if(R.ok&&R.p>=25)sc+=Math.min(e.p,40)/12;
+    if(R.ok&&R.f<=10)sc-=e.f/5;
+    if(kind==="pre")sc-=Math.max(0,e.f-5)/3+Math.max(0,e.p-15)/10;
+    if(S.feel.hungry||(R.ok&&R.k<=0))sc+=e.p/15;
+    if(S.feel.unwell)sc-=e.f/6;
+    if(e.caution.length)sc-=0.5;
+    if(t.lib)sc+=0.3;
+    e.score=sc;e.scaled=scale!==1;e.over=target>0&&e.kcal>target*1.15;out.push(e);
+  });
+  out.sort(function(a,b){return b.score-a.score||CO_T.indexOf(a.t)-CO_T.indexOf(b.t);});
+  return {list:out.slice(0,n),notes:notes};
+}
+function coWhy(e,S,target){
+  var R=S.R,p=[e.t.why];
+  if(R.ok&&R.p>=25&&e.p>=15)p.push("adds "+fmtN(Math.round(e.p))+" g of the "+fmtN(R.p)+" g protein left");
+  if(R.ok&&R.f<=10)p.push(e.f<=5?"low in fat ("+fmtN(Math.round(e.f))+" g)":"has "+fmtN(Math.round(e.f))+" g fat");
+  if(target>0)p.push(e.over?"about "+fmtN(Math.round(e.kcal-target))+" kcal more than this allowance":"fits about "+fmtN(target)+" kcal");
+  var s=p.join("; ");return s.charAt(0).toUpperCase()+s.slice(1)+".";
+}
+function coCardHTML(e,S,target,slot,key){
+  var h='<article class="sf-idea co-sug"><div class="sf-top"><b>'+esc(e.t.name)+'</b><span class="qe-k">≈ '+fmtK(e.kcal)+' kcal</span></div>';
+  h+=e.items.map(function(x){return '<div class="sf-ing"><span class="n">'+esc(x.food.name)+'<small>'+fmtN(x.g)+' '+x.food.unit+'</small></span></div>';}).join('');
+  h+='<p class="sf-nut">P '+g0(e.p)+' g · C '+g0(e.c)+' g · F '+g0(e.f)+' g</p>';
+  h+='<p class="small"><b>Why:</b> '+esc(coWhy(e,S,target))+'</p>';
+  e.caution.slice(0,2).forEach(function(c){h+='<p class="bi-caution small">'+esc(c)+'</p>';});
+  h+='<p class="muted small">Estimate'+(e.scaled?', portions sized to your allowance':'')+'. Values: '+esc(Object.keys(e.srcs).join(", "))+'.'+(e.t.lib?' A saved product, not necessarily at home.':'')+'</p>';
+  h+='<button type="button" class="btn-line" data-co-log="'+esc(key)+'" data-slot-to="'+esc(slot)+'">Log this meal…</button>';
+  return h+'</article>';
+}
+/* ---------- plan my remaining meals ---------- */
+function coDefaultMeals(S){var h=S.isT?new Date().getHours():18,m=[];if(S.training&&(S.feel.hungry||S.feel.low||S.last==="gt4"))m.push("pre");if(h<15)m.push("snack");m.push("dinner");m.push("evening");return m;}
+function coAlloc(S){
+  var R=S.R,B=R.ok?Math.max(0,R.k):0,meals=S.c.meals||coDefaultMeals(S),ed=S.c.edited||{},out={},fixed=0,free=[];
+  meals.forEach(function(m){if(ed[m]!=null){out[m]=Math.max(0,Math.round(ed[m]));fixed+=out[m];}else free.push(m);});
+  var left=Math.max(0,B-fixed);
+  if(free.indexOf("pre")>=0){out.pre=Math.min(left,Math.min(150,Math.round(B*0.15/10)*10));left-=out.pre;free=free.filter(function(m){return m!=="pre";});}
+  var W=free.reduce(function(s,m){return s+(CO_W[m]||0.2);},0),acc=0;
+  free.forEach(function(m,i){var v=i===free.length-1?left-acc:Math.round(left*(CO_W[m]||0.2)/W/10)*10;v=Math.max(0,v);out[m]=v;acc+=v;});
+  var tot=meals.reduce(function(s,m){return s+(out[m]||0);},0);
+  return {B:B,meals:meals,alloc:out,total:tot,over:tot-B};
+}
+function coPlanHTML(s){
+  var S=coState(s.day),R=S.R,A=coAlloc(S),h='';
+  if(!R.ok)return '<div class="note">Set up your daily targets in Me first. The plan splits what you have left today.</div>';
+  h+='<div class="sf-rems">'+remChip("Calories",R.k,"kcal")+remChip("Protein",R.p,"g")+remChip("Carbs",R.c,"g")+remChip("Fat",R.f,"g")+'</div>';
+  h+='<p class="lbl pf-lbl">Which meals do you still expect to eat?</p><div class="chips">'+CO_MEALS.map(function(m){var on=A.meals.indexOf(m[0])>=0;return '<button type="button" class="chip'+(on?' on':'')+'" data-co-meal="'+m[0]+'" aria-pressed="'+on+'">'+m[1]+'</button>';}).join('')+'</div>';
+  if(!A.meals.length)return h+'<p class="muted">Choose at least one meal.</p>';
+  if(A.B<=0)h+='<div class="note">You’ve reached today’s calorie target, so there is nothing to split. If you’re genuinely hungry, eating is fine — the options below are filling and protein-rich.</div>';
+  h+='<div class="co-alloc">'+A.meals.map(function(m){var v=A.alloc[m]||0,sh=A.B>0?Math.min(1,v/A.B):0;
+    return '<div class="co-row"><span class="n">'+esc((CO_MEALS.filter(function(x){return x[0]===m;})[0]||[m,m])[1])+'<small>'+(A.B>0&&v>0?'about P '+fmtN(Math.round(Math.max(0,R.p)*sh))+' · C '+fmtN(Math.round(Math.max(0,R.c)*sh))+' · F '+fmtN(Math.round(Math.max(0,R.f)*sh))+' g':'')+(S.c.edited[m]!=null?' · set by you':'')+'</small></span><div class="pf-wrap co-k"><input class="inp" inputmode="numeric" data-co-alloc="'+m+'" value="'+v+'" aria-label="kcal for '+m+'"><span class="pf-suf">kcal</span></div></div>';}).join('')+'</div>';
+  h+='<p class="co-total" id="co-total">'+coTotalTxt(A)+'</p>';
+  if(Object.keys(S.c.edited).length)h+='<button type="button" class="linkbtn" data-co-reset style="align-self:flex-start">Reset to a suggested split</button>';
+  h+='<p class="muted small">These are flexible guides, not portions you must eat. Macros don’t need to match exactly.</p>';
+  var used=[];
+  A.meals.forEach(function(m){var kind=m==="pre"?"pre":m==="dinner"?"meal":m==="other"&&A.alloc[m]>=350?"meal":"snack",tg=A.B>0?A.alloc[m]:(kind==="meal"?0:200);
+    if(A.B>0&&tg<40)return;
+    var r=coSuggest(kind,tg,S,2,used);r.list.forEach(function(e){used.push(e.t.id);});
+    APP.coSug=APP.coSug||{};
+    h+='<p class="eyebrow" style="margin-top:8px">'+esc((CO_MEALS.filter(function(x){return x[0]===m;})[0]||[m,m])[1])+(A.B>0?' · about '+fmtN(tg)+' kcal':'')+'</p>';
+    h+=r.list.length?r.list.map(function(e,i){var key=m+"_"+i;APP.coSug[key]=e;return coCardHTML(e,S,A.B>0?tg:0,m==="dinner"?"Dinner":"Snacks",key);}).join(''):'<p class="muted small">No suitable option with complete nutrition data.</p>';
+  });
+  return h;
+}
+function coTotalTxt(A){return 'Total '+fmtN(A.total)+' of '+fmtN(A.B)+' kcal left'+(A.over>0?' · <b class="co-over">'+fmtN(A.over)+' kcal over your remaining budget</b>. That’s fine if you’re hungry; it’s marked so you know.':A.over<0?' · '+fmtN(-A.over)+' kcal not planned':'');}
+/* ---------- learning from your records (cautious, needs enough days) ---------- */
+function coLearn(){
+  var days=lastDays(90),D=loadDiary(),T=calcFuel(loadFuel()),obs=[],C=coAll();
+  var rows=days.map(function(d){var c=dayCtx(d),st=dayStats(d,D),co=C[d]||{},feel=co.feel||[];
+    var energy=c.energy!=null?c.energy:feel.indexOf("low")>=0?2:feel.indexOf("good")>=0?4:null;
+    var hungry=c.hunger!=null?c.hunger>=4:feel.indexOf("hungry")>=0?true:feel.length?false:null;
+    return {d:d,act:c.act||[],energy:energy,hungry:hungry,recovery:c.recovery,st:st,co:co};});
+  var avg=function(L,f){var v=L.map(f).filter(function(x){return x!=null;});return v.length?v.reduce(function(a,b){return a+b;},0)/v.length:null;};
+  /* 1. protein on strength days and energy */
+  if(T.protein){var sd=rows.filter(function(r){return r.act.indexOf("strength")>=0&&r.energy!=null&&r.st.complete;});
+    var hi=sd.filter(function(r){return r.st.t.p>=T.protein*0.9;}),lo=sd.filter(function(r){return r.st.t.p<T.protein*0.9;});
+    if(hi.length>=3&&lo.length>=3){var dh=avg(hi,function(r){return r.energy;}),dl=avg(lo,function(r){return r.energy;});
+      if(dh-dl>=1)obs.push("On strength-training days when you ate close to your protein target, you often reported better energy ("+hi.length+" days) than on days with less protein ("+lo.length+" days).");
+      else if(dl-dh>=1)obs.push("On strength-training days, your energy wasn’t higher when you ate more protein ("+hi.length+" and "+lo.length+" days compared).");}}
+  /* 2. calories eaten before training and energy (needs a training time) */
+  var tr=rows.filter(function(r){return (r.act.indexOf("strength")>=0||r.act.indexOf("cardio")>=0)&&r.energy!=null&&r.co.time&&/^\d{1,2}:\d{2}$/.test(r.co.time);});
+  var pre=tr.map(function(r){var p=r.co.time.split(":"),t0=parseISO(r.d);t0.setHours(+p[0],+p[1],0,0);var k=0;(D[r.d]||[]).forEach(function(e){if(e.at&&e.at<t0.getTime())k+=entryTotals(e).kcal;});return {r:r,k:k};});
+  if(pre.length>=6){var med=pre.map(function(x){return x.k;}).sort(function(a,b){return a-b;})[Math.floor(pre.length/2)];
+    var less=pre.filter(function(x){return x.k<med;}),more=pre.filter(function(x){return x.k>=med;});
+    if(less.length>=3&&more.length>=3){var el=avg(less,function(x){return x.r.energy;}),em=avg(more,function(x){return x.r.energy;});
+      if(em-el>=1)obs.push("You often report lower energy on days when you eat less before training ("+less.length+" days compared with "+more.length+").");}}
+  /* 3. hunger on training days vs rest days */
+  var th=rows.filter(function(r){return r.hungry!=null&&(r.act.indexOf("strength")>=0||r.act.indexOf("cardio")>=0);}),rh=rows.filter(function(r){return r.hungry!=null&&r.act.indexOf("rest")>=0&&r.act.length===1;});
+  if(th.length>=4&&rh.length>=4){var a1=th.filter(function(r){return r.hungry;}).length,a2=rh.filter(function(r){return r.hungry;}).length;
+    if(a1/th.length-a2/rh.length>=0.3)obs.push("You report being hungry more often on training days ("+a1+" of "+th.length+") than on rest days ("+a2+" of "+rh.length+"). Planning a little more food on training days may suit you.");
+    else if(a2/rh.length-a1/th.length>=0.3)obs.push("You report being hungry more often on rest days ("+a2+" of "+rh.length+") than on training days ("+a1+" of "+th.length+").");}
+  /* 4. recovery the next day after a low-calorie day */
+  if(T.kcal){var nx=rows.filter(function(r,i){return i>0&&r.recovery!=null&&rows[i-1].st.complete;}).map(function(r){var i=rows.indexOf(r);return {rec:r.recovery,prevLow:rows[i-1].st.t.kcal<T.kcal*0.8};});
+    var pl=nx.filter(function(x){return x.prevLow;}),pn=nx.filter(function(x){return !x.prevLow;});
+    if(pl.length>=3&&pn.length>=3){var rl=avg(pl,function(x){return x.rec;}),rn=avg(pn,function(x){return x.rec;});
+      if(rn-rl>=1)obs.push("Your recovery rating is often lower the day after you ate well under your calorie target ("+pl.length+" days compared with "+pn.length+").");}}
+  var counts={days:rows.filter(function(r){return r.act.length&&(r.energy!=null||r.hungry!=null);}).length};
+  return {obs:obs,counts:counts};
+}
+/* ---------- card on Today and the two sheets ---------- */
+function coLeftLine(R){if(!R.ok)return 'Set up your targets in Me';var m=function(l,v,u){return l+' '+(v>=0?fmtN(v)+' '+u+' left':fmtN(-v)+' '+u+' over');};return [m('',R.k,'kcal').trim(),m('P',R.p,'g'),m('C',R.c,'g'),m('F',R.f,'g')].join(' · ');}
+function coActChips(day){var a=coActs(day);return '<div class="chips co-acts" role="group" aria-label="Today’s activity">'+CO_ACTS.map(function(x){var on=a.indexOf(x[0])>=0;return '<button type="button" class="chip'+(on?' on':'')+'" data-co-act="'+x[0]+'" aria-pressed="'+on+'">'+x[1]+'</button>';}).join('')+'</div>';}
+function smartFuelCardHTML(){
+  var open=ui().sfOpen!==false,day=selDay(),R=sfRemaining(day),a=coActs(day);
+  var h='<section class="card sf-card" aria-label="Smart Fuel Coach"><button type="button" class="bi-head sf-head" data-sf-toggle aria-expanded="'+open+'"><span><b>Smart Fuel Coach</b><small id="co-left">'+esc(coLeftLine(R))+(a.length&&!open?' · '+esc(a.map(function(k){return (CO_ACTS.filter(function(x){return x[0]===k;})[0]||[k,k])[1].split(" ")[0];}).join(", ")):'')+'</small></span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" class="bi-chev'+(open?' up':'')+'"><path d="M6 9l6 6 6-6"/></svg></button>';
+  if(open)h+='<div class="sf-body"><p class="lbl pf-lbl" style="margin:0">'+(day===todayISO()?'Today’s':esc(dayLabel(day))+'’s')+' activity</p>'+coActChips(day)
+    +'<button type="button" class="btn-main" data-co-open="help">Help me choose what to eat</button>'
+    +'<button type="button" class="btn-line" data-co-open="plan">Plan my remaining meals</button>'
+    +'<button type="button" class="linkbtn" data-sf-open style="align-self:flex-start">Snack ideas &amp; My Kitchen</button>'
+    +'<p class="muted small">Suggestions are never logged for you.</p></div>';
+  return h+'</section>';
+}
+function coHelpHTML(s){
+  var S=coState(s.day),R=S.R,G=coGuidance(S),h='',c=S.c;
+  if(R.ok)h+='<div class="sf-rems">'+remChip("Calories",R.k,"kcal")+remChip("Protein",R.p,"g")+remChip("Carbs",R.c,"g")+remChip("Fat",R.f,"g")+'</div>';
+  h+='<div class="co-q"><p class="pf-lbl">Activity</p>'+coActChips(s.day);
+  h+='<details class="fold co-more"'+(c.dur||c.inten||c.time?' open':'')+'><summary><span>Duration, intensity and time <span class="muted small" style="font-weight:500">(optional)</span></span></summary><div class="fold-b">'
+    +'<div class="grid2"><div><label class="lbl" for="co-dur">Duration</label><div class="pf-wrap"><input class="inp" id="co-dur" inputmode="numeric" value="'+esc(c.dur)+'"><span class="pf-suf">min</span></div></div><div><label class="lbl" for="co-time">Training time</label><input class="inp" id="co-time" type="time" value="'+esc(c.time)+'"></div></div>'
+    +'<div class="seg" role="group" aria-label="Intensity" style="margin-top:10px">'+CO_INT.map(function(x){var on=c.inten===x[0];return '<button type="button" class="'+(on?'on':'')+'" data-co-int="'+x[0]+'" aria-pressed="'+on+'">'+x[1]+'</button>';}).join('')+'</div></div></details></div>';
+  h+='<div class="co-q"><p class="pf-lbl">How do you feel? <span class="muted small" style="font-weight:500">(optional)</span></p><div class="chips">'+CO_FEEL.map(function(x){var on=c.feel.indexOf(x[0])>=0;return '<button type="button" class="chip'+(on?' on':'')+'" data-co-feel="'+x[0]+'" aria-pressed="'+on+'">'+x[1]+'</button>';}).join('')+'</div>';
+  var fs=Object.keys(S.feelSrc);if(fs.length)h+='<p class="muted small">Using your Body Intelligence check-in: '+esc(fs.map(function(k){return S.feelSrc[k];}).join(", "))+'. Tap above to change it for the coach.</p>';
+  h+='</div><div class="co-q"><p class="pf-lbl">When did you last eat? <span class="muted small" style="font-weight:500">(optional)</span></p><div class="chips">'+CO_LAST.map(function(x){var on=c.last===x[0];return '<button type="button" class="chip'+(on?' on':'')+'" data-co-last="'+x[0]+'" aria-pressed="'+on+'">'+x[1]+'</button>';}).join('')+'</div>';
+  if(!c.last&&S.lastSrc==="log"){var L=coLastLogged(s.day);h+='<p class="muted small">From your log: last food at '+hm(L.at)+' ('+(L.h<1?'under an hour':fmtN(Math.floor(L.h))+' h')+' ago).</p>';}
+  h+='</div><p class="co-saved" id="co-saved">'+(c.at?'✓ Saved for '+esc(dayLabel(s.day).toLowerCase()==='today'?'today':dayLabel(s.day)):'')+'</p>';
+  /* guidance */
+  h+='<div class="co-guide"><p class="eyebrow">Guidance</p><p class="co-head">'+esc(G.head)+'</p>'+(G.points.length?'<ul class="qe-notes">'+G.points.map(function(p){return '<li>'+esc(p)+'</li>';}).join('')+'</ul>':'')+'</div>';
+  /* 2–4 suggestions for the next time you eat */
+  var hr=S.isT?new Date().getHours():18,sug=[],used=[];APP.coSug={};
+  var add=function(kind,target,n,label){var r=coSuggest(kind,target,S,n,used);r.list.forEach(function(e){used.push(e.t.id);sug.push({e:e,target:target,label:label});});return r;};
+  var notes;
+  if(G.preSnack)notes=add("pre",R.ok?Math.min(200,Math.max(80,R.k)):150,3,"Before activity");
+  if(R.ok&&R.k<=0){notes=add("snack",0,3,"If you’re hungry");}
+  else{var A=coAlloc(S),meal=A.alloc.dinner||(R.ok?Math.round(R.k*0.6):500);
+    if(hr>=15||!S.isT)notes=add("meal",meal,G.preSnack?1:2,"Dinner");else notes=add("meal",R.ok?Math.round(R.k*0.45):500,G.preSnack?1:2,"Next meal");
+    if(sug.length<4)add("snack",A.alloc.evening||A.alloc.snack||150,G.preSnack?0:1,"Snack");}
+  if(sug.length<2)add("snack",150,2-sug.length,"Snack");
+  h+='<p class="eyebrow" style="margin-top:6px">Ideas for what to eat</p>';
+  h+=sug.slice(0,4).map(function(x,i){var key="h_"+i;APP.coSug[key]=x.e;return '<p class="muted small co-for">'+esc(x.label)+'</p>'+coCardHTML(x.e,S,x.target,x.label==="Dinner"?"Dinner":x.label==="Next meal"?slotForType("auto"):"Snacks",key);}).join('')||'<p class="muted">No suitable option with complete nutrition data.</p>';
+  var ex=(notes&&notes.notes.excluded)||[];if(ex.length)h+='<p class="muted small">Some options aren’t shown because of your food profile (for example '+esc(ex[0])+'). Confirmed allergies, diagnosed intolerances and foods you prefer to avoid are never suggested; suspected sensitivities are shown with a note.</p>';
+  /* training vs rest, learning */
+  h+='<details class="fold"><summary><span>Training days and rest days</span></summary><div class="fold-b"><ul class="qe-notes">'
+    +'<li>Your daily calorie and macro targets stay the same on training and rest days unless you change them in Me. The coach never adds exercise calories on top, because your activity level is already part of your target.</li>'
+    +'<li>Protein helps you keep muscle on every day, not only training days.</li>'
+    +'<li>Carbohydrate fuels activity and helps recovery. There’s no need to cut it on rest days.</li>'
+    +'<li>Overall energy matters for recovery. You don’t have to earn food with exercise.</li>'
+    +'<li>Drink regularly, more on warm or long training days. Fluids today: '+fmtN(Math.round(dayFluid(s.day)))+' ml.</li>'
+    +'<li>Hunger is useful information. Going over a target now and then is normal.</li></ul></div></details>';
+  var LR=coLearn();
+  h+='<details class="fold"><summary><span>What your records suggest</span></summary><div class="fold-b">'+(LR.obs.length?'<ul class="qe-notes">'+LR.obs.map(function(o){return '<li>'+esc(o)+'</li>';}).join('')+'</ul><p class="muted small">Possible patterns from your own records, not proof of cause. They change as you log more.</p>':'<p class="muted">Not enough records yet. Patterns appear after several days with an activity, how you felt, and a completed food log (at least 3–4 days in each group compared). Days with records so far: '+LR.counts.days+'.</p>')+'<p class="muted small">Food reactions are in My Body Intelligence → Food &amp; Body Patterns.</p></div></details>';
+  h+='<p class="muted small">Smart Fuel Coach uses fixed, transparent rules and your own data. It isn’t an AI and isn’t medical advice. Nothing is logged unless you tap “Log this meal…” and then confirm.</p>';
+  return h;
+}
+function openCoach(view){openSheet({view:view==="plan"?"coplan":"cohelp",day:selDay(),slot:lastSlot()});}
+function coRerender(){var b=$(".sheet-body"),y=b?b.scrollTop:0;renderSheet();var b2=$(".sheet-body");if(b2)b2.scrollTop=y;}
+function coSavedFeedback(){toast("Saved");var el=$("#co-saved");if(el)el.textContent="✓ Saved";}
+/* open a suggestion in the normal Quick Estimate review: you can change portions; nothing is saved until "Add to Today's Intake" */
+function coLog(key,slot){
+  var e=(APP.coSug||{})[key];if(!e)return;var from=APP.sheet?clone(APP.sheet):null;
+  var items=e.items.map(function(x){var f=clone(x.food);return {id:uid(),raw:"",words:"",n:x.g,u:f.unit,each:false,cands:[{kind:f.src==="custom"?"custom":"db",key:f.ref,id:f.ref,name:f.name,src:(srcOf(f)||{}).t||"unverified",terms:[f.name]}],
+    food:f,g:x.g,unit:f.unit,count:null,conf:"given",notes:["Portion suggested by Smart Fuel Coach. Change it to what you actually eat."]};});
+  openSheet({view:"qe",text:e.t.name,mode:"B",items:items,mac:null,name:e.t.name,slot:SLOTS.indexOf(slot)>=0?slot:lastSlot(),from:from});
+}
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("button");if(!t)return;var s=APP.sheet,inCo=s&&(s.view==="cohelp"||s.view==="coplan"),day=inCo?s.day:selDay();
+  if(t.hasAttribute("data-co-open")){openCoach(t.getAttribute("data-co-open"));return;}
+  if(t.hasAttribute("data-co-act")){var k=t.getAttribute("data-co-act"),a=coActs(day).slice(),i=a.indexOf(k);
+    if(i>=0)a.splice(i,1);else{if(k==="rest")a=a.filter(function(x){return x==="other";});else a=a.filter(function(x){return x!=="rest";});a.push(k);}
+    coSetActs(day,a);render();if(inCo)coRerender();coSavedFeedback();return;}
+  if(!inCo)return;
+  if(t.hasAttribute("data-co-feel")){var f=t.getAttribute("data-co-feel"),c=coDay(day),L=c.feel.slice(),j=L.indexOf(f);
+    if(j>=0)L.splice(j,1);else{if(f==="good")L=L.filter(function(x){return x==="unwell";});else if(f==="hungry"||f==="low")L=L.filter(function(x){return x!=="good";});L.push(f);}
+    coSet(day,{feel:L});coRerender();coSavedFeedback();return;}
+  if(t.hasAttribute("data-co-last")){var l=t.getAttribute("data-co-last");coSet(day,{last:coDay(day).last===l?"":l});coRerender();coSavedFeedback();return;}
+  if(t.hasAttribute("data-co-int")){var n=t.getAttribute("data-co-int");coSet(day,{inten:coDay(day).inten===n?"":n});coRerender();coSavedFeedback();return;}
+  if(t.hasAttribute("data-co-meal")){var m=t.getAttribute("data-co-meal"),S=coState(day),M=(S.c.meals||coDefaultMeals(S)).slice(),q=M.indexOf(m),ed=Object.assign({},S.c.edited);
+    if(q>=0){M.splice(q,1);delete ed[m];}else M.push(m);M.sort(function(a,b){return CO_MEALS.map(function(x){return x[0];}).indexOf(a)-CO_MEALS.map(function(x){return x[0];}).indexOf(b);});
+    coSet(day,{meals:M,edited:ed});coRerender();coSavedFeedback();return;}
+  if(t.hasAttribute("data-co-reset")){coSet(day,{edited:{}});coRerender();coSavedFeedback();return;}
+  if(t.hasAttribute("data-co-log")){coLog(t.getAttribute("data-co-log"),t.getAttribute("data-slot-to"));return;}
+});
+document.addEventListener("change",function(ev){
+  var t=ev.target,s=APP.sheet;if(!s||(s.view!=="cohelp"&&s.view!=="coplan"))return;
+  if(t.id==="co-dur"){var v=num(t.value);coSet(s.day,{dur:v!=null&&v>0&&v<600?String(Math.round(v)):""});coRerender();coSavedFeedback();return;}
+  if(t.id==="co-time"){coSet(s.day,{time:/^\d{1,2}:\d{2}$/.test(t.value)?t.value:""});coRerender();coSavedFeedback();return;}
+  if(t.hasAttribute("data-co-alloc")){var m=t.getAttribute("data-co-alloc"),v2=num(t.value),ed=Object.assign({},coDay(s.day).edited);if(v2==null||v2<0)delete ed[m];else ed[m]=Math.round(v2);coSet(s.day,{edited:ed});coRerender();coSavedFeedback();return;}
+});
 
 /* ============================== render ============================== */
 var TABS=[["today","Today",'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'],["foods","Foods",'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'],["signals","Signals",'<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>'],["me","Me",'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>']];
@@ -3440,7 +3779,9 @@ function renderSheet(focus){
   else if(s.view==="product"){title=s.saved?"Food Library":s.id?"Edit product":"Save new product";back=!!s.from&&!s.saved;body=productHTML(s);}
   else if(s.view==="calendar"){title="Choose a date";body=calendarHTML();}
   else if(s.view==="qe"){title="Quick Estimate";back=!!s.from;body=qeHTML(s);}
-  else if(s.view==="smartfuel"){title="Smart Fuel";body=smartFuelSheetHTML(s);}
+  else if(s.view==="smartfuel"){title="Snack ideas & My Kitchen";body=smartFuelSheetHTML(s);}
+  else if(s.view==="cohelp"){title="Smart Fuel Coach";body=coHelpHTML(s);}
+  else if(s.view==="coplan"){title="Plan my remaining meals";body=coPlanHTML(s);}
   else if(s.view==="phase"){title="My Nutrition Phase";body=phaseSheetHTML(s);}
   else if(s.view==="insights"){title="All insights";body=insightsSheetHTML();}
   else if(s.view==="morning"){title=s.d.id?"Edit morning check":"How do I feel today?";body=morningFormHTML(s);}
@@ -3655,7 +3996,7 @@ applyTheme();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{libAll:libAll,ownFood:ownFood,qeMacros:qeMacros,qeBuildEntry:qeBuildEntry,qeRange:qeRange,qmCheck:qmCheck,qeEstimate:qeEstimate,qeTotals:qeTotals,qeSave:qeSave,openQE:openQE,dayTotals:dayTotals,FOOD_SRC:FOOD_SRC,FOODDB:FOODDB,dbFood:dbFood,sfFood:sfFood,baseDrink:baseDrink,searchResults:searchResults,APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{coState:coState,coGuidance:coGuidance,coAlloc:coAlloc,coSuggest:coSuggest,coLearn:coLearn,coAll:coAll,sfRemaining:sfRemaining,openCoach:openCoach,libAll:libAll,ownFood:ownFood,qeMacros:qeMacros,qeBuildEntry:qeBuildEntry,qeRange:qeRange,qmCheck:qmCheck,qeEstimate:qeEstimate,qeTotals:qeTotals,qeSave:qeSave,openQE:openQE,dayTotals:dayTotals,FOOD_SRC:FOOD_SRC,FOODDB:FOODDB,dbFood:dbFood,sfFood:sfFood,baseDrink:baseDrink,searchResults:searchResults,APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 
