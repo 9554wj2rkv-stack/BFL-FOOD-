@@ -28,6 +28,13 @@
 - Everything can be changed before saving. Nothing is saved until you tap **Add to Today's Intake**, and a double tap can't add the meal twice.
 - Quick Estimate matches words against a fixed food list. It is not an AI and can misread unusual descriptions, so always check the result.
 
+**Food Library**
+- Tap **+ Save new product** in Foods, copy the label once (name, brand, barcode, per 100 g or 100 ml, calories, protein, carbs, fat, and optionally fibre, sugars, salt and serving size), and tap **Save to Food Library**.
+- Saved products appear in Foods search (by name, brand or barcode), in Log food or drink and in Quick Estimate. Typing a saved barcode finds the product without internet.
+- Enter the amount you ate and the nutrition is calculated. Saving a product never adds it to your intake.
+- Edit or delete a product from its food screen. Entries you already logged keep their values.
+- Products are stored with your own foods (`bflfood_customfoods`), so foods you saved earlier are part of the same library.
+
 **Foods**
 - Search one food list in English or Danish. Every food shows its source.
 - Look up a product by its barcode number through Open Food Facts.
