@@ -16,6 +16,7 @@
   Three tabs: Today, Foods, Me. Data keys (bflfood_*) are the same as version 1, so logged food,
   your plan, food profile, favourites, own foods and weight check-ins carry over.
   The engine (calculations, food list, barcode lookup, safety checks) is copied unchanged.
+  Oct 2026: Fibre and total sugar rows in the main overview on Today (fibre and total/added sugar, read from logged portions; never changes kcal or carbs).
   Oct 2026: Smart Fuel Coach on Today (rule-based guidance, meal planning and suggestions; never logs on its own).
   Oct 2026: Save new product → Food Library (same storage as your own foods, bflfood_customfoods).
   Oct 2026: one unified food catalogue with a source on every food (Frida preferred, USDA FoodData Central
@@ -228,6 +229,17 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .sf-av button{min-height:40px;font-size:15px}
 .sf-saved{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:4px}
 /* evidence */
+.nd-card{gap:14px}
+.mrow#m-sug .mrow-top{margin-bottom:0}
+.nd-inc-line{margin-top:-8px}
+.bar.fib i{background:var(--ink-2)}
+.nd-left{color:var(--ink-2)}
+.nd-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding-top:12px}
+.nd-row .n{font-size:18px;font-weight:700}
+.nd-row .n small{display:block;font-size:14px;font-weight:500;color:var(--muted)}
+.nd-row b{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nd-inc{font-size:15px}
+.nd-amt{margin-top:2px}
 .co-q{display:flex;flex-direction:column;gap:8px}
 .co-acts .chip{font-size:15px}
 .co-guide{border:1.5px solid var(--line-2);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
@@ -916,12 +928,16 @@ function sumItems(items){
   t.miss=miss;t.count=items.length;return t;
 }
 var FOODDB=SC.FOODDB,byKey=SC.byKey,stateLabel=SC.stateLabel;
+/* Total sugars per 100 g (per 100 ml for drinks), read from the same USDA SR Legacy records as the rest of each
+   catalogue food (field Sugar_Tot). Foods missing here have no sugar value: shown as "not known", never as 0.
+   The original Body Fuel Lab foods have no recorded sugar values. */
+var CAT_SUGAR={"bread_white":5.67,"bread_wholewheat":4.34,"bread_multigrain":6.39,"rugbrod":0.53,"bread_rye_light":3.85,"roll_white":5.55,"crispbread":1.01,"butter_usda":0.06,"butter_blend":0.0,"cheese_gouda":2.22,"cheese_cheddar":0.48,"cottage_cheese":4.0,"milk_whole":5.21,"milk_2":5.22,"milk_1":5.36,"milk_skim":5.27,"yogurt_plain":4.66,"yogurt_greek":3.56,"cream_light":3.67,"cream_heavy":2.92,"egg_boiled":1.12,"potato_skin":0.91,"potato_mash":1.43,"potato_fries":0.28,"potato_baked":1.18,"pork_mince":0.0,"frikadelle":0.0,"beef_mince_85":0.0,"pork_loin":0.0,"pork_sausage":1.09,"chicken_breast_roast":0.0,"chicken_roast":0.0,"salami":0.96,"cod":0.0,"plaice":0.0,"herring_pickled":7.71,"salmon_farmed":0.0,"fish_fingers":1.65,"red_cabbage":3.32,"coleslaw":12.19,"broccoli":1.39,"cauliflower":2.08,"carrot_raw":4.74,"tomato":2.63,"onion":4.24,"lettuce":1.97,"orange":8.5,"rice_white":0.05,"pasta":0.56,"oatmeal":0.27,"gravy":0.21,"jam":48.5,"sugar":99.8,"rapeseed_oil":0.0,"orange_juice":8.81,"apple_juice":10.08,"egg":0.37,"coffee_black":0.0};
 function dbFood(key,st){
   var d=byKey[key];if(!d)return null;var states=Object.keys(d.s);if(!st||!d.s[st])st=states[0];var v=d.s[st];
   var src=(typeof FOOD_SRC!=="undefined"&&FOOD_SRC[key])||null,CU=(typeof FOOD_UNITS!=="undefined"&&src&&src.t!=="unverified"&&FOOD_UNITS[key])||{};
   var pre=(d.serv||[]).map(function(s){return [s[0],s[1]];});
   Object.keys(CU).forEach(function(u){pre.push(["1 "+(u==="large"?"large egg":u==="piece"&&d.k==="egg"?"medium egg":u),CU[u].g]);});
-  return {src:"db",ref:key,name:d.name,state:st,states:states,unit:d.u||"g",per100:{kcal:v[0],p:v[1],c:v[2],f:v[3],fib:v[4]},cat:d.cat,
+  return {src:"db",ref:key,name:d.name,state:st,states:states,unit:d.u||"g",per100:{kcal:v[0],p:v[1],c:v[2],f:v[3],fib:v[4],sug:CAT_SUGAR[key]!=null?CAT_SUGAR[key]:null},cat:d.cat,
     presets:pre,defQty:d.defg||100,ingredients:null,allergens:[],traces:[],allergenText:"",
     source:src&&src.t!=="unverified"?(src.t==="frida"?"Frida (DTU)":"USDA FoodData Central")+(src.ref?", "+src.ref:""):undefined};
 }
@@ -1212,7 +1228,7 @@ function baseDrink(kind){
   var own=DB.get(K.custom,[]).filter(function(c){return c.drinkKind===kind;}).slice(-1)[0];
   if(own){var x=clone(own);x.src="custom";x.ref=own.id;x.presets=[];return x;}
   var B={water:{name:"Water",per100:ZERO,note:"Plain water: 0 kcal."},sparkling:{name:"Sparkling water (plain, unflavoured)",per100:ZERO,note:"Plain, unflavoured sparkling water: 0 kcal. For flavoured or sweetened kinds, use Barcode or Other drink."},
-    coffee:{name:"Black coffee",per100:(byKey.coffee_black?{kcal:byKey.coffee_black.s.aseaten[0],p:byKey.coffee_black.s.aseaten[1],c:byKey.coffee_black.s.aseaten[2],f:byKey.coffee_black.s.aseaten[3],fib:byKey.coffee_black.s.aseaten[4]}:{kcal:1,p:0.12,c:0,f:0.02,fib:0}),note:"Brewed black coffee: about 1 kcal per 100 ml (USDA FoodData Central, FDC 171890). Milk or sugar is not included."},
+    coffee:{name:"Black coffee",per100:(byKey.coffee_black?{kcal:byKey.coffee_black.s.aseaten[0],p:byKey.coffee_black.s.aseaten[1],c:byKey.coffee_black.s.aseaten[2],f:byKey.coffee_black.s.aseaten[3],fib:byKey.coffee_black.s.aseaten[4],sug:CAT_SUGAR.coffee_black}:{kcal:1,p:0.12,c:0,f:0.02,fib:0}),note:"Brewed black coffee: about 1 kcal per 100 ml (USDA FoodData Central, FDC 171890). Milk or sugar is not included."},
     tea:{name:"Tea (plain)",per100:UNKNOWN,note:"The Food Tracker has no verified nutrition data for tea, so only the volume is counted. Enter label values once if you want calories included."}}[kind];
   if(!B)return null;
   return {src:"drink",ref:kind,name:B.name,unit:"ml",per100:clone(B.per100),cat:null,presets:[],ingredients:null,allergens:[],traces:[],allergenText:"",drinkNote:B.note};
@@ -1396,6 +1412,7 @@ function budgetHTML(f,R,t,day){
       return '<div class="mrow" id="m-'+m[0]+'"><div class="mrow-top"><span class="n">'+m[1]+'</span><span class="v">'+fmtN(eat)+' <span>/ '+fmtN(m[3])+' g</span></span></div><div class="bar '+m[0]+'"><i style="width:'+pc.toFixed(1)+'%"'+(ov?' class="over"':'')+'></i></div><p class="mrow-left'+(left<0?' over':'')+'" id="m-'+m[0]+'-left">'+(left<0?fmtN(-left)+' g OVER':fmtN(left)+' g LEFT')+'</p></div>';
     }).join('');
   }
+  if(R.kcal!=null&&(isT||t.entries))h+=ndRowsHTML(day);
   if(R.kcal!=null&&(isT||t.entries))h+=proteinMealsHTML(day,R);
   if(isT&&R.phase&&R.phase.ok&&R.phase.mode!=="maintain"){var rf=reviewFlags();if(rf.length)h+='<p class="phase-line warn-t">'+rf.length+' thing'+(rf.length===1?'':'s')+' to review · Me → My Cutting Progress</p>';}
   h+='<div class="fluids"><span>Fluids '+(isT?'today':'this day')+'</span><b id="b-fluid">'+fmtK(fl)+' ml</b></div>';
@@ -1518,6 +1535,7 @@ function viewMe(){
   if(R.ok&&!PHON)h+='<div class="seg" role="group" aria-label="Goal">'+STRAT.map(function(s){var k=R.targets[s[0]];return '<button type="button" class="'+(f.strategy===s[0]?'on':'')+'" data-strat="'+s[0]+'" aria-pressed="'+(f.strategy===s[0])+'">'+s[1]+'<small>'+(k!=null?fmtN(k):'n/a')+'</small></button>';}).join('')+'</div>';
   R.warn.forEach(function(w){h+='<div class="note warn">'+esc(w)+'</div>';});
   h+='</section>';
+  h+=ndSettingsHTML();
   var open=ui().open||{};
   function fold(id,title,body,def){var o=id in open?open[id]:def;return '<details class="fold" data-fold="'+id+'"'+(o?' open':'')+'><summary><span>'+title+'</span></summary><div class="fold-b">'+body+'</div></details>';}
   h+=fold("me-meas","My measurements"+(f.measSaved?' <span class="muted small" style="font-weight:500">· '+esc(fmtDate(f.measSaved))+'</span>':''),measForm(f,R),!f.measSaved);
@@ -2827,6 +2845,67 @@ document.addEventListener("input",function(ev){var t=ev.target,s=APP.sheet;if(t.
 document.addEventListener("toggle",function(ev){var d=ev.target,s=APP.sheet;if(!s||s.view!=="smartfuel"||!d||!d.id)return;if(d.id==="sf-kitchen")s.openKitchen=d.open;if(d.id==="sf-saved")s.openSaved=d.open;},true);
 
 
+/* ============================== NUTRITION DETAILS (fibre and sugar) ============================== */
+/* Read-only totals from the diary for the selected date: amount eaten × value per 100, exactly like calories.
+   Sugars are part of carbohydrates on EU labels, so they are shown for information and never added to carbs or kcal.
+   A food without a value is counted as "missing", never as 0 (plain water and plain sparkling water are 0).
+   Added sugar is only shown when a food's data lists it; it is never worked out from other values.
+   Setting: bflfood_nutridetails {fibRef, open}. */
+K.nd="bflfood_nutridetails";
+function ndPrefs(){var p=DB.get(K.nd,{})||{},r=num(p.fibRef);return {fibRef:r!=null&&r>=5&&r<=100?r:25,open:!!p.open};}
+function ndSave(patch){var p=DB.get(K.nd,{})||{};if(typeof p!=="object"||Array.isArray(p))p={};Object.keys(patch).forEach(function(k){p[k]=patch[k];});DB.set(K.nd,p);}
+function ndKnownZero(it){return it.src==="drink"&&(it.ref==="water"||it.ref==="sparkling");}
+function ndTotals(day){
+  var es=loadDiary()[day]||[],o={fib:0,sug:0,asug:0,n:0,miss:{fib:0,sug:0,asug:0},known:{fib:0,sug:0,asug:0},missNames:{fib:[],sug:[]}};
+  es.forEach(function(e){(e.items||[]).forEach(function(it){
+    if(ndKnownZero(it))return; /* plain water: no fibre or sugar, and not counted as a food */
+    o.n++;var q=(+it.qty||0)*(e.factor||1),p=it.per100||{};
+    ["fib","sug","asug"].forEach(function(k){var v=p[k];
+      if(v==null||!isFinite(v)){o.miss[k]++;if(o.missNames[k]&&o.missNames[k].indexOf(it.name)<0)o.missNames[k].push(it.name);return;}
+      o[k]+=v*q/100;o.known[k]++;});
+  });});
+  return o;
+}
+function ndCardHTML(day){
+  var P=ndPrefs(),T=ndTotals(day),open=P.open,inc=T.miss.fib||T.miss.sug;
+  var fv=T.known.fib?fmtN(r1(T.fib)):'–',sv=T.known.sug?fmtN(r1(T.sug))+' g':'not known';
+  var sum=T.n?'Fibre '+fv+' / '+fmtN(P.fibRef)+' g · Total sugar '+sv+(inc?' · incomplete data':''):'Nothing logged'+(day===todayISO()?' yet':' for this day');
+  var h='<section class="card nd-card" aria-label="Nutrition Details"><button type="button" class="bi-head" data-nd-toggle aria-expanded="'+open+'"><span><b>Nutrition Details</b><small id="nd-sum">'+esc(sum)+'</small></span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" class="bi-chev'+(open?' up':'')+'"><path d="M6 9l6 6 6-6"/></svg></button>';
+  if(!open)return h+'</section>';
+  var pc=Math.min(100,T.fib/P.fibRef*100),left=P.fibRef-T.fib;
+  h+='<div class="mrow" id="nd-fib"><div class="mrow-top"><span class="n">Fibre</span><span class="v">'+fv+' <span>/ '+fmtN(P.fibRef)+' g</span></span></div><div class="bar fib"><i style="width:'+pc.toFixed(1)+'%"></i></div><p class="mrow-left nd-left">'+(!T.known.fib&&T.n?'No fibre values for these foods':left>0.05?fmtN(r1(left))+' g to your reference':'Reference reached')+'</p></div>';
+  h+='<div class="nd-row" id="nd-sug"><span class="n">Total sugar<small>Part of your carbohydrates, not counted twice</small></span><b>'+sv+'</b></div>';
+  h+=T.known.asug?'<div class="nd-row" id="nd-asug"><span class="n">Added sugar<small>Listed for '+T.known.asug+' of '+T.n+' food'+(T.n===1?'':'s')+'</small></span><b>'+fmtN(r1(T.asug))+' g</b></div>'
+    :'<p class="muted small" id="nd-asug">Added sugar: not listed for '+(T.n?'these foods':'any food yet')+'. It’s only shown when a label or barcode lists it.</p>';
+  if(inc){var parts=[];if(T.miss.fib)parts.push('fibre is missing for '+T.miss.fib+' of '+T.n);if(T.miss.sug)parts.push('total sugar for '+T.miss.sug+' of '+T.n);
+    var nm=T.missNames.sug.concat(T.missNames.fib.filter(function(x){return T.missNames.sug.indexOf(x)<0;})).slice(0,5);
+    h+='<div class="note nd-inc" id="nd-inc"><b>Incomplete data:</b> '+esc(parts.join(', '))+' foods. Those foods aren’t counted, so the real totals may be higher.'+(nm.length?'<br><span class="small">Missing values: '+esc(nm.join(', '))+(T.missNames.sug.length+T.missNames.fib.length>5?' …':'')+'</span>':'')+'</div>';}
+  h+='<details class="fold"><summary><span>About fibre and sugar</span></summary><div class="fold-b"><ul class="qe-notes">'
+    +'<li>Fibre supports digestion and helps you feel full. If you want more, increase it gradually and drink enough, according to what your stomach tolerates.</li>'
+    +'<li>Your fibre reference ('+fmtN(P.fibRef)+' g) is a guide, not a limit. Being under or over it on a given day is fine.</li>'
+    +'<li>Total sugar includes natural sugars from fruit, milk and vegetables. Added sugar is sugar added during production, shown only when it’s listed.</li>'
+    +'<li>Sugars are already included in carbohydrates on EU labels, so they never change your carbohydrate or calorie totals.</li></ul></div></details>';
+  h+='<button type="button" class="linkbtn" data-act="nd-settings" style="align-self:flex-start">Change fibre reference</button>';
+  return h+'</section>';
+}
+/* Fibre and total sugar rows inside the main overview, styled like the macro rows. Same totals as before (ndTotals). */
+function ndRowsHTML(day){
+  var P=ndPrefs(),T=ndTotals(day),fk=T.known.fib>0,sk=T.known.sug>0,fib=Math.round(T.fib),left=P.fibRef-fib,pc=fk?Math.min(100,T.fib/P.fibRef*100):0;
+  var h='<div class="mrow" id="m-fib"><div class="mrow-top"><span class="n">Fibre</span><span class="v">'+(fk?fmtN(fib):'–')+' <span>/ '+fmtN(P.fibRef)+' g</span></span></div><div class="bar fib"><i style="width:'+pc.toFixed(1)+'%"></i></div><p class="mrow-left nd-left" id="m-fib-left">'+(!fk&&T.n?'NOT KNOWN':left>0?fmtN(left)+' g LEFT':'REFERENCE REACHED')+'</p></div>';
+  h+='<div class="mrow" id="m-sug"><div class="mrow-top"><span class="n">Total sugar</span><span class="v">'+(sk?fmtN(T.sug<10?r1(T.sug):Math.round(T.sug))+' g':'Not known')+'</span></div></div>';
+  if(T.miss.fib||T.miss.sug)h+='<p class="muted small nd-inc-line" id="m-nd-inc">Incomplete: '+[T.miss.fib?'fibre missing for '+T.miss.fib:'',T.miss.sug?'sugar for '+T.miss.sug:''].filter(Boolean).join(', ')+' of '+T.n+' food'+(T.n===1?'':'s')+'.</p>';
+  return h;
+}
+function ndSettingsHTML(){var P=ndPrefs();
+  return '<section class="card" id="nd-set" aria-label="Nutrition Details"><p class="eyebrow">Nutrition Details</p><div><label class="lbl" for="nd-fibref">Daily fibre reference</label><div class="pf-wrap" style="max-width:200px"><input class="inp" id="nd-fibref" inputmode="decimal" value="'+fmtN(P.fibRef)+'"><span class="pf-suf">g</span></div></div><p class="muted small">Starts at 25 g. A personal guide shown on Today, not a target you must hit. Fibre supports digestion; if you want more, increase it gradually and drink enough, according to what your stomach tolerates.</p><p class="muted small">Total sugar includes natural sugars (fruit, milk, vegetables). It is already part of carbohydrates on EU labels, so it never changes your carbohydrate or calorie totals. Foods without a value are shown as not known, never as 0.</p></section>';}
+document.addEventListener("click",function(ev){var t=ev.target.closest("button");if(!t)return;
+  if(t.hasAttribute("data-nd-toggle")){ndSave({open:!ndPrefs().open});render();return;}
+  if(t.getAttribute("data-act")==="nd-settings"){go("me");setTimeout(function(){var el=$("#nd-set");if(el)try{el.scrollIntoView({block:"center"});}catch(e){}},30);return;}
+});
+document.addEventListener("change",function(ev){var t=ev.target;if(t.id!=="nd-fibref")return;var v=num(t.value);
+  if(v==null||v<5||v>100){toast("Use a fibre reference between 5 and 100 g");t.value=fmtN(ndPrefs().fibRef);return;}
+  ndSave({fibRef:r1(v)});t.value=fmtN(r1(v));toast("Saved: fibre reference "+fmtN(r1(v))+" g");});
+
 /* ============================== SMART FUEL COACH ============================== */
 /* A transparent, rule-based helper (not an AI). It READS: today's targets and diary (the same numbers as the Today card),
    your food profile, your Food Library, the food list, and Body Intelligence check-ins. It never writes to the diary:
@@ -2839,7 +2918,7 @@ document.addEventListener("toggle",function(ev){var d=ev.target,s=APP.sheet;if(!
 K.coach="bflfood_coach_v1";
 GK.pasta=Object.assign({},GK.pasta,{gluten:"Pasta is usually made with wheat."}); /* food-profile knowledge for a catalogue food */
 var CO_ACTS=[["strength","Strength training"],["cardio","Walking / incline treadmill"],["rest","Rest / recovery"],["other","Other activity"]];
-var CO_FEEL=[["good","Good energy, not hungry"],["hungry","Hungry"],["low","Low energy"],["tired","Tired / recovering"],["unwell","Feeling unwell"]];
+var CO_FEEL=[["good","Good energy, not hungry"],["hungry","Hungry"],["low","Low energy"],["tired","Tired / recovering"],["digest","Digestive discomfort"],["unwell","Feeling unwell"]];
 var CO_LAST=[["lt2","Within 2 hours"],["2to4","2–4 hours ago"],["gt4","More than 4 hours ago"],["unsure","Not sure"]];
 var CO_INT=[["easy","Easy"],["moderate","Moderate"],["hard","Hard"]];
 var CO_MEALS=[["pre","Pre-training snack"],["snack","Snack"],["dinner","Dinner"],["evening","Evening snack"],["other","Other"]];
@@ -2868,7 +2947,8 @@ function coState(day){
   var last=c.last,lastSrc="you";
   if(!last&&isT){var L=coLastLogged(day);if(L){last=L.h<2?"lt2":L.h<=4?"2to4":"gt4";lastSrc="log";}}
   var mins=null;if(isT&&c.time&&/^\d{1,2}:\d{2}$/.test(c.time)){var p=c.time.split(":"),now=new Date(),tt=new Date();tt.setHours(+p[0],+p[1],0,0);mins=Math.round((tt-now)/60000);}
-  return {day:day,isT:isT,c:c,acts:acts,ctx:ctx,R:R,feel:feel,feelSrc:src,last:last,lastSrc:lastSrc,minsToTraining:mins,dur:num(c.dur),inten:c.inten,
+  var ND=ndTotals(day),NP=ndPrefs(),hr=isT?new Date().getHours():20,fibLow=ND.n>0&&hr>=12&&ND.fib<NP.fibRef*(hr>=17?0.6:0.4);
+  return {day:day,isT:isT,c:c,acts:acts,ctx:ctx,R:R,feel:feel,nd:ND,fibRef:NP.fibRef,fibLow:fibLow,feelSrc:src,last:last,lastSrc:lastSrc,minsToTraining:mins,dur:num(c.dur),inten:c.inten,
     training:acts.indexOf("strength")>=0||acts.indexOf("cardio")>=0||acts.indexOf("other")>=0};
 }
 /* ---------- the rules (deterministic; every message comes from one of these lines) ---------- */
@@ -2905,6 +2985,9 @@ function coGuidance(S){
   }
   else if(other){g.head="Eat according to your hunger and your remaining needs. If the activity is long or hard, a small carbohydrate snack beforehand can help.";if(hungry||longAgo)g.preSnack=true;}
   if(walk&&str&&!g.preSnack&&(hungry||longAgo))g.preSnack=true;
+  /* fibre */
+  if(f.digest)g.points.push("You noted digestive discomfort, so high-fibre options aren’t pushed today. Familiar, gentle foods may feel better.");
+  else if(S.fibLow)g.points.push("Fibre so far: "+fmtN(r1(S.nd.fib))+" of your "+fmtN(S.fibRef)+" g reference"+(S.nd.miss.fib?" (some foods have no fibre value)":"")+". Options with some fibre are listed a little higher — increase gradually if you’re not used to it.");
   /* what's left today */
   if(R.ok){
     if(R.k<=0)g.points.push("You’ve reached today’s calorie target"+(R.k<0?" (about "+fmtN(-R.k)+" kcal over)":"")+". That’s fine. If you’re genuinely hungry, eat — protein-rich, filling options are listed first.");
@@ -2942,11 +3025,13 @@ function coLibTemplates(){
 }
 /* totals, profile check and source labels for one suggestion at a given scale */
 function coEval(t,scale){
-  var o={t:t,items:[],kcal:0,p:0,c:0,f:0,missing:[],exclude:[],caution:[],srcs:{}};
+  var o={t:t,items:[],kcal:0,p:0,c:0,f:0,fib:0,sug:0,fibMiss:[],sugMiss:[],missing:[],exclude:[],caution:[],srcs:{}};
   t.items.forEach(function(it){
     var food=coFood(it);if(!food||!food.per100||["kcal","p","c","f"].some(function(k){return food.per100[k]==null;})){o.missing.push(food?food.name:it[1]);return;}
     var g=t.fix?it[2]:Math.max(5,Math.round(it[2]*scale/5)*5),pn=portion(food.per100,g);
     o.items.push({food:food,g:g});["kcal","p","c","f"].forEach(function(k){o[k]+=pn[k];});
+    if(food.per100.fib!=null)o.fib+=food.per100.fib*g/100;else o.fibMiss.push(food.name);
+    if(food.per100.sug!=null)o.sug+=food.per100.sug*g/100;else o.sugMiss.push(food.name);
     var ck=sfCheck(food);ck.exclude.forEach(function(x){o.exclude.push(food.name+": "+x);});ck.caution.forEach(function(x){o.caution.push(food.name+": "+x);});
     var s=srcOf(food);if(s)o.srcs[(CAT_SRC_TYPE[s.t]||CAT_SRC_TYPE.unverified).short]=1;
   });
@@ -2970,6 +3055,8 @@ function coSuggest(kind,target,S,n,skip){
     if(kind==="pre")sc-=Math.max(0,e.f-5)/3+Math.max(0,e.p-15)/10;
     if(S.feel.hungry||(R.ok&&R.k<=0))sc+=e.p/15;
     if(S.feel.unwell)sc-=e.f/6;
+    if(S.feel.digest)sc-=Math.max(0,e.fib-4)/2;
+    else if(S.fibLow)sc+=Math.min(e.fib,8)/4;
     if(e.caution.length)sc-=0.5;
     if(t.lib)sc+=0.3;
     e.score=sc;e.scaled=scale!==1;e.over=target>0&&e.kcal>target*1.15;out.push(e);
@@ -2980,6 +3067,8 @@ function coSuggest(kind,target,S,n,skip){
 function coWhy(e,S,target){
   var R=S.R,p=[e.t.why];
   if(R.ok&&R.p>=25&&e.p>=15)p.push("adds "+fmtN(Math.round(e.p))+" g of the "+fmtN(R.p)+" g protein left");
+  if(S.fibLow&&!S.feel.digest&&e.fib>=3)p.push("adds about "+fmtN(r1(e.fib))+" g fibre");
+  if(S.feel.digest&&e.fib<=4)p.push("not high in fibre");
   if(R.ok&&R.f<=10)p.push(e.f<=5?"low in fat ("+fmtN(Math.round(e.f))+" g)":"has "+fmtN(Math.round(e.f))+" g fat");
   if(target>0)p.push(e.over?"about "+fmtN(Math.round(e.kcal-target))+" kcal more than this allowance":"fits about "+fmtN(target)+" kcal");
   var s=p.join("; ");return s.charAt(0).toUpperCase()+s.slice(1)+".";
@@ -2988,6 +3077,7 @@ function coCardHTML(e,S,target,slot,key){
   var h='<article class="sf-idea co-sug"><div class="sf-top"><b>'+esc(e.t.name)+'</b><span class="qe-k">≈ '+fmtK(e.kcal)+' kcal</span></div>';
   h+=e.items.map(function(x){return '<div class="sf-ing"><span class="n">'+esc(x.food.name)+'<small>'+fmtN(x.g)+' '+x.food.unit+'</small></span></div>';}).join('');
   h+='<p class="sf-nut">P '+g0(e.p)+' g · C '+g0(e.c)+' g · F '+g0(e.f)+' g</p>';
+  h+='<p class="muted small">Fibre '+(e.fibMiss.length?(e.fibMiss.length===e.items.length?'not known':'≥ '+fmtN(r1(e.fib))+' g'):fmtN(r1(e.fib))+' g')+' · total sugar '+(e.sugMiss.length?(e.sugMiss.length===e.items.length?'not known':'≥ '+fmtN(r1(e.sug))+' g (not known for '+e.sugMiss.join(', ')+')'):fmtN(r1(e.sug))+' g')+'</p>';
   h+='<p class="small"><b>Why:</b> '+esc(coWhy(e,S,target))+'</p>';
   e.caution.slice(0,2).forEach(function(c){h+='<p class="bi-caution small">'+esc(c)+'</p>';});
   h+='<p class="muted small">Estimate'+(e.scaled?', portions sized to your allowance':'')+'. Values: '+esc(Object.keys(e.srcs).join(", "))+'.'+(e.t.lib?' A saved product, not necessarily at home.':'')+'</p>';
@@ -3111,6 +3201,11 @@ function coHelpHTML(s){
     +'<li>Overall energy matters for recovery. You don’t have to earn food with exercise.</li>'
     +'<li>Drink regularly, more on warm or long training days. Fluids today: '+fmtN(Math.round(dayFluid(s.day)))+' ml.</li>'
     +'<li>Hunger is useful information. Going over a target now and then is normal.</li></ul></div></details>';
+  h+='<details class="fold"><summary><span>Total sugar and added sugar</span></summary><div class="fold-b"><ul class="qe-notes">'
+    +'<li>Total sugar is all sugars in a food, including natural sugars in fruit, milk and vegetables.</li>'
+    +'<li>Added sugar is sugar put in during production. It’s only shown when a label or barcode lists it; the app never guesses it.</li>'
+    +'<li>Both are already part of carbohydrates, so they don’t change your calorie or carbohydrate totals.</li>'
+    +'<li>Today so far: total sugar '+fmtN(r1(S.nd.sug))+' g'+(S.nd.known.asug?', added sugar '+fmtN(r1(S.nd.asug))+' g (where listed)':'')+(S.nd.miss.sug?' · not known for '+S.nd.miss.sug+' food'+(S.nd.miss.sug===1?'':'s'):'')+'.</li></ul></div></details>';
   var LR=coLearn();
   h+='<details class="fold"><summary><span>What your records suggest</span></summary><div class="fold-b">'+(LR.obs.length?'<ul class="qe-notes">'+LR.obs.map(function(o){return '<li>'+esc(o)+'</li>';}).join('')+'</ul><p class="muted small">Possible patterns from your own records, not proof of cause. They change as you log more.</p>':'<p class="muted">Not enough records yet. Patterns appear after several days with an activity, how you felt, and a completed food log (at least 3–4 days in each group compared). Days with records so far: '+LR.counts.days+'.</p>')+'<p class="muted small">Food reactions are in My Body Intelligence → Food &amp; Body Patterns.</p></div></details>';
   h+='<p class="muted small">Smart Fuel Coach uses fixed, transparent rules and your own data. It isn’t an AI and isn’t medical advice. Nothing is logged unless you tap “Log this meal…” and then confirm.</p>';
@@ -3134,7 +3229,7 @@ document.addEventListener("click",function(ev){
     coSetActs(day,a);render();if(inCo)coRerender();coSavedFeedback();return;}
   if(!inCo)return;
   if(t.hasAttribute("data-co-feel")){var f=t.getAttribute("data-co-feel"),c=coDay(day),L=c.feel.slice(),j=L.indexOf(f);
-    if(j>=0)L.splice(j,1);else{if(f==="good")L=L.filter(function(x){return x==="unwell";});else if(f==="hungry"||f==="low")L=L.filter(function(x){return x!=="good";});L.push(f);}
+    if(j>=0)L.splice(j,1);else{if(f==="good")L=L.filter(function(x){return x==="unwell"||x==="digest";});else if(f==="hungry"||f==="low")L=L.filter(function(x){return x!=="good";});L.push(f);}
     coSet(day,{feel:L});coRerender();coSavedFeedback();return;}
   if(t.hasAttribute("data-co-last")){var l=t.getAttribute("data-co-last");coSet(day,{last:coDay(day).last===l?"":l});coRerender();coSavedFeedback();return;}
   if(t.hasAttribute("data-co-int")){var n=t.getAttribute("data-co-int");coSet(day,{inten:coDay(day).inten===n?"":n});coRerender();coSavedFeedback();return;}
@@ -3694,7 +3789,8 @@ function ownFood(rec){
   o.defQty=rec.serving&&rec.serving.g>0?rec.serving.g:(rec.unit==="ml"?250:100);return o;
 }
 var PF_REQ=[["kcal","Calories","kcal",900],["p","Protein","g",100],["c","Carbohydrates","g",100],["f","Fat","g",100]];
-var PF_OPT=[["fib","Fibre","g",100],["sug","Sugars","g",100],["salt","Salt","g",100]];
+var PF_OPT=[["fib","Fibre <span class=\"muted small\">(kostfibre)</span>","g",100],["sug","Total sugars <span class=\"muted small\">(heraf sukkerarter)</span>","g",100],["asug","Added sugars <span class=\"muted small\">(tilsat sukker)</span>","g",100],["salt","Salt","g",100]];
+var PF_PLAIN={fib:"Fibre",sug:"Total sugars",asug:"Added sugars",salt:"Salt"};
 function pfStr(v){return v==null||v===""?"":fmtN(v);}
 function pfFromRec(r){var p=r.per100||{},d={name:r.name||"",brand:r.brand||"",barcode:r.barcode||"",unit:r.unit||"g",serving:r.serving&&r.serving.g?fmtN(r.serving.g):""};
   PF_REQ.concat(PF_OPT).forEach(function(x){d[x[0]]=pfStr(p[x[0]]);});return d;}
@@ -3717,8 +3813,10 @@ function productHTML(s){
     +'<div class="grid2">'+pfInp("brand","Brand",d.brand,"",true)+pfInp("barcode","Barcode",d.barcode,"",true,"numeric")+'</div>'
     +'<div><p class="pf-lbl">Nutrition values on the label are</p><div class="seg" role="radiogroup" aria-label="Values per"><button type="button" role="radio" aria-checked="'+(u==="g")+'" class="'+(u==="g"?'on':'')+'" data-unit="g">Per 100 g</button><button type="button" role="radio" aria-checked="'+(u==="ml")+'" class="'+(u==="ml"?'on':'')+'" data-unit="ml">Per 100 ml</button></div></div>'
     +'<div class="grid2">'+PF_REQ.map(function(x){return pfInp(x[0],x[1],d[x[0]],x[2],false,"decimal");}).join('')+'</div>'
-    +'<details class="pf-more"'+(PF_OPT.some(function(x){return d[x[0]];})||d.serving?' open':'')+'><summary>More from the label (optional)</summary><div class="grid2" style="margin-top:12px">'
-    +PF_OPT.map(function(x){return pfInp(x[0],x[1],d[x[0]],x[2],true,"decimal");}).join('')
+    +'<div class="grid2">'+PF_OPT.filter(function(x){return x[0]!=="salt";}).map(function(x){return pfInp(x[0],x[1],d[x[0]],x[2],true,"decimal");}).join('')+'</div>'
+    +'<p class="muted small" style="margin-top:-6px">Leave a value empty if the label doesn’t list it. Empty is saved as “not known”, never as 0. Fill in added sugars only if the label lists them.</p>'
+    +'<details class="pf-more"'+(d.salt||d.serving?' open':'')+'><summary>Salt and serving size (optional)</summary><div class="grid2" style="margin-top:12px">'
+    +PF_OPT.filter(function(x){return x[0]==="salt";}).map(function(x){return pfInp(x[0],x[1],d[x[0]],x[2],true,"decimal");}).join('')
     +pfInp("serving","Serving size",d.serving,u,true,"decimal")+'</div></details>'
     +'<p class="muted small">Decimal comma or point both work, for example 3,5 or 3.5.</p>'
     +'<div id="pf-err">'+(s.err||'')+'</div><button type="button" class="btn-main" data-act="pf-save">'+(s.id?'Save changes':'Save to Food Library')+'</button>';
@@ -3735,7 +3833,9 @@ function pfCheck(s){
     if(raw===""){err.push("Enter "+x[1].toLowerCase()+" per 100 "+u+". Use 0 if the label says 0.");return;}
     if(v==null||v<0||v>x[3]){err.push(x[1]+" must be a number between 0 and "+x[3]+".");return;}per[x[0]]=v;});
   PF_OPT.forEach(function(x){var raw=String(d[x[0]]||"").trim(),v=num(raw);per[x[0]]=null;if(raw==="")return;
-    if(v==null||v<0||v>x[3]){err.push(x[1]+" must be a number between 0 and "+x[3]+", or left empty.");return;}per[x[0]]=v;});
+    if(v==null||v<0||v>x[3]){err.push(PF_PLAIN[x[0]]+" must be a number between 0 and "+x[3]+", or left empty.");return;}per[x[0]]=v;});
+  if(per.asug!=null&&per.sug!=null&&per.asug>per.sug+0.05)err.push("Added sugars can’t be more than total sugars. Check the label.");
+  if(per.asug!=null&&per.c!=null&&per.asug>per.c+0.05)err.push("Added sugars can’t be more than carbohydrates. Check the label.");
   if(per.sug!=null&&per.c!=null&&per.sug>per.c+0.05)err.push("Sugars can’t be more than carbohydrates. Check the label.");
   if(per.p!=null&&per.c!=null&&per.f!=null&&per.p+per.c+per.f+(per.fib||0)>100.5&&u==="g")err.push("Protein, carbs and fat add up to more than 100 g per 100 g. Check the label.");
   var bc=String(d.barcode||"").replace(/\s/g,"");
@@ -3794,10 +3894,17 @@ function renderSheet(focus){
 }
 function openLog(slot){openSheet({view:"log",slot:slot||lastSlot(),q:""});}
 function openPortion(food,qty,from){var s=APP.sheet||{};openSheet({view:"portion",food:food,qty:qty,slot:s.slot||lastSlot(),from:from||(s.view?clone(s):null)});}
-function per100Line(food){var p=food.per100||{};if(food.src==="custom"&&(p.fib!=null||p.sug!=null||p.salt!=null)&&food.unit!=="portion"){var base=per100Line(Object.assign({},food,{src:"x"}));return base+[["fib","fibre"],["sug","sugars"],["salt","salt"]].filter(function(x){return p[x[0]]!=null;}).map(function(x){return ' · '+fmtN(p[x[0]])+' g '+x[1];}).join('');}if(food.unit==="portion")return 'Per portion: '+[["kcal",""],["p"," protein"],["c"," carbs"],["f"," fat"]].map(function(x){var v=p[x[0]];return v==null?'not known'+x[1]:(x[0]==="kcal"?fmtK(v/100)+' kcal':fmtN(r1(v/100))+' g'+x[1]);}).join(' · ');return 'Per 100 '+food.unit+': '+[["kcal",""],["p"," protein"],["c"," carbs"],["f"," fat"]].map(function(x){var v=p[x[0]];return v==null?'n/a'+x[1]:(x[0]==="kcal"?fmtK(v)+' kcal':fmtN(v)+' g'+x[1]);}).join(' · ');}
+function per100Line(food){var p=food.per100||{};if(food.src==="custom"&&(p.fib!=null||p.sug!=null||p.asug!=null||p.salt!=null)&&food.unit!=="portion"){var base=per100Line(Object.assign({},food,{src:"x"}));return base+[["fib","fibre"],["sug","sugars"],["asug","added sugars"],["salt","salt"]].filter(function(x){return p[x[0]]!=null;}).map(function(x){return ' · '+fmtN(p[x[0]])+' g '+x[1];}).join('');}if(food.unit==="portion")return 'Per portion: '+[["kcal",""],["p"," protein"],["c"," carbs"],["f"," fat"]].map(function(x){var v=p[x[0]];return v==null?'not known'+x[1]:(x[0]==="kcal"?fmtK(v/100)+' kcal':fmtN(r1(v/100))+' g'+x[1]);}).join(' · ');return 'Per 100 '+food.unit+': '+[["kcal",""],["p"," protein"],["c"," carbs"],["f"," fat"]].map(function(x){var v=p[x[0]];return v==null?'n/a'+x[1]:(x[0]==="kcal"?fmtK(v)+' kcal':fmtN(v)+' g'+x[1]);}).join(' · ');}
+function ndAmountLine(food,qty){
+  var pp=food.per100||{},q=+qty||0,bits=[];
+  bits.push(pp.fib!=null?'Fibre '+fmtN(r1(pp.fib*q/100))+' g':'fibre not known');
+  bits.push(pp.sug!=null?'total sugar '+fmtN(r1(pp.sug*q/100))+' g':'sugar not known');
+  if(pp.asug!=null)bits.push('added sugar '+fmtN(r1(pp.asug*q/100))+' g');
+  var s=bits.join(' · ');return '<p class="muted small nd-amt">'+esc(s.charAt(0).toUpperCase()+s.slice(1))+'</p>';
+}
 function resultHTML(food,qty){
   var p=portion(food.per100,qty);
-  return '<p class="big">'+(p.kcal==null?'– kcal':fmtK(p.kcal)+' kcal')+'</p><p>'+[["p","protein"],["c","carbs"],["f","fat"]].map(function(x){return p[x[0]]==null?x[1]+' n/a':fmtN(r1(p[x[0]]))+' g '+x[1];}).join(' · ')+'</p>';
+  return '<p class="big">'+(p.kcal==null?'– kcal':fmtK(p.kcal)+' kcal')+'</p><p>'+[["p","protein"],["c","carbs"],["f","fat"]].map(function(x){return p[x[0]]==null?x[1]+' n/a':fmtN(r1(p[x[0]]))+' g '+x[1];}).join(' · ')+'</p>'+ndAmountLine(food,qty);
 }
 function warningsHTML(food){
   var r=checkFood(food),h='';
@@ -3856,7 +3963,7 @@ function lookupBarcode(code){
     if(!info.found){setBres('<div class="note">No product found for '+esc(code)+'.<br><button type="button" class="btn" data-act="manual">Save it from the label</button></div>');return;}
     var p=data.product||{},u=offUnit(p);
     var food={src:"off",ref:info.barcode,name:info.name||"Unnamed product",brand:info.brand||"",unit:u.unit,serving:info.serving||"",
-      per100:{kcal:numOrNull(info.kcal),p:numOrNull(info.protein),c:numOrNull(info.carbs),f:numOrNull(info.fat),fib:numOrNull(info.fib)},
+      per100:{kcal:numOrNull(info.kcal),p:numOrNull(info.protein),c:numOrNull(info.carbs),f:numOrNull(info.fat),fib:numOrNull(info.fib),sug:numOrNull((p.nutriments||{})["sugars_100g"]),asug:numOrNull((p.nutriments||{})["added-sugars_100g"])},
       ingredients:p.ingredients_text_da||p.ingredients_text||p.ingredients_text_en||"",allergens:p.allergens_tags||[],traces:p.traces_tags||[],cat:null,presets:[]};
     var sg=u.unit==="g"?SC.parseServingGrams(info.serving):parseServingMl(info.serving);if(sg)food.presets.push(["1 serving",sg]);
     APP.bres="";
@@ -3996,7 +4103,7 @@ applyTheme();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{coState:coState,coGuidance:coGuidance,coAlloc:coAlloc,coSuggest:coSuggest,coLearn:coLearn,coAll:coAll,sfRemaining:sfRemaining,openCoach:openCoach,libAll:libAll,ownFood:ownFood,qeMacros:qeMacros,qeBuildEntry:qeBuildEntry,qeRange:qeRange,qmCheck:qmCheck,qeEstimate:qeEstimate,qeTotals:qeTotals,qeSave:qeSave,openQE:openQE,dayTotals:dayTotals,FOOD_SRC:FOOD_SRC,FOODDB:FOODDB,dbFood:dbFood,sfFood:sfFood,baseDrink:baseDrink,searchResults:searchResults,APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{ndTotals:ndTotals,ndPrefs:ndPrefs,CAT_SUGAR:CAT_SUGAR,coState:coState,coGuidance:coGuidance,coAlloc:coAlloc,coSuggest:coSuggest,coLearn:coLearn,coAll:coAll,sfRemaining:sfRemaining,openCoach:openCoach,libAll:libAll,ownFood:ownFood,qeMacros:qeMacros,qeBuildEntry:qeBuildEntry,qeRange:qeRange,qmCheck:qmCheck,qeEstimate:qeEstimate,qeTotals:qeTotals,qeSave:qeSave,openQE:openQE,dayTotals:dayTotals,FOOD_SRC:FOOD_SRC,FOODDB:FOODDB,dbFood:dbFood,sfFood:sfFood,baseDrink:baseDrink,searchResults:searchResults,APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 

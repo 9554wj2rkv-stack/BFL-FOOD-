@@ -20,6 +20,13 @@
 - Today's log is grouped by breakfast, lunch, dinner and snacks.
 - Drinks count towards your fluids for the day.
 
+**Fibre and total sugar** (in the main overview on Today, right after Fat)
+- Fibre: eaten / your reference (25 g to start, change it in Me) with a bar and grams left. A guide, not a limit.
+- Total sugar: grams eaten, no bar and no limit. Shows "Not known" when no food has a sugar value.
+- Calculated from what you logged, for any date you select. Sugars are part of carbohydrates on EU labels, so they never change your carbohydrate or calorie totals.
+- Foods without a value are never counted as 0; a small "Incomplete" line says how many.
+- Save new product has Fibre (kostfibre), Total sugars (heraf sukkerarter) and Added sugars (tilsat sukker).
+
 **Smart Fuel Coach** (on Today, right under your calories and macros)
 - Pick today's activity (strength, walking / incline treadmill, rest, other). It's the same activity Body Intelligence uses, so you enter it once.
 - **Help me choose what to eat:** optional taps for how you feel and when you last ate, then plain guidance (for example whether a snack before a walk makes sense) and 2–4 food ideas with portions, calories, protein, carbs and fat calculated from the food list and your Food Library.
