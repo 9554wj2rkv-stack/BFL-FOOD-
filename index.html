@@ -16,6 +16,7 @@
   Three tabs: Today, Foods, Me. Data keys (bflfood_*) are the same as version 1, so logged food,
   your plan, food profile, favourites, own foods and weight check-ins carry over.
   The engine (calculations, food list, barcode lookup, safety checks) is copied unchanged.
+  Nov 2026: "Mark day complete" moved to the top of Today (same completion data).
   Oct 2026: Fibre and total sugar rows in the main overview on Today (fibre and total/added sugar, read from logged portions; never changes kcal or carbs).
   Oct 2026: Smart Fuel Coach on Today (rule-based guidance, meal planning and suggestions; never logs on its own).
   Oct 2026: Save new product → Food Library (same storage as your own foods, bflfood_customfoods).
@@ -184,6 +185,16 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .day-nav{display:flex;align-items:center;gap:2px;min-width:0}
 .day-nav .head-date{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:center;padding:0 2px}
 .day-nav .cr-arrow{width:34px;height:40px;flex:none}
+.day-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:-10px}
+.day-actions .back-today{margin-top:0;white-space:nowrap;padding:0 14px;min-height:44px}
+.dc-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-left:auto}
+.dc-btn{border:0;background:var(--btn);color:var(--on-btn);border-radius:999px;min-height:44px;padding:0 18px;font-size:16px;font-weight:800;white-space:nowrap}
+.dc-btn:active{transform:scale(.97)}
+.dc-btn.done{background:var(--ok);color:var(--on-btn)}
+.dc-btn:disabled{opacity:.4}
+.dc-btn:focus-visible,.dc-undo:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.dc-undo{border:0;background:none;color:var(--ink);font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;padding:4px 2px;min-height:32px}
+.dc-hint{font-size:13px;color:var(--muted);font-weight:600}
 .back-today{align-self:flex-start;border:0;background:var(--btn);color:var(--on-btn);border-radius:999px;min-height:40px;padding:0 16px;font-size:15px;font-weight:800;margin-top:-10px}
 .nl-day{font-size:24px;font-weight:800;margin:6px 0 2px}
 .day-clear{align-self:flex-start;font-size:14px;color:var(--muted);margin-top:6px}
@@ -1474,10 +1485,10 @@ function viewToday(){
   var pillTxt=R.phase&&R.phase.ok?R.phase.name:(R.kcal!=null?STRAT_PILL[f.strategy]:"Nutrition phase");
   var nav='<div class="day-nav"><button type="button" class="cr-arrow" data-day-step="-1" aria-label="Previous day"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="head-date" id="day-label">'+(isT?'Today · '+esc(parseISO(day).toLocaleDateString("en-GB",{day:"numeric",month:"short"})):dayLabel(day)==="Yesterday"?'Yesterday':esc(parseISO(day).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).replace(",","")))+'</span><button type="button" class="cr-arrow" data-day-step="1" aria-label="Next day"'+(isT?' disabled':'')+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button><button type="button" class="cr-arrow" data-day-cal aria-label="Choose a date"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></button></div>';
   return '<header class="head">'+nav+'<button type="button" class="pill pill-btn" data-open-phase aria-label="My Nutrition Phase: '+esc(pillTxt)+'">'+esc(pillTxt)+'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></header>'
-    +(isT?'':'<button type="button" class="back-today" data-day-today>‹ Back to today</button>')
+    +'<div class="day-actions">'+(isT?'<span></span>':'<button type="button" class="back-today" data-day-today>‹ Back to today</button>')+dayCompleteHTML(day)+'</div>'
     +budgetHTML(f,R,t,day)+smartFuelCardHTML()
     +'<button type="button" class="btn-main" data-act="log">'+ICON.plus+(isT?'Log food or drink':'Add to '+esc(dayLabel(day)))+'</button>'
-    +againHTML()+logHTML(day)+completeTodayHTML(day)+dayNotesHTML(day)+biCardHTML();
+    +againHTML()+logHTML(day)+dayNotesHTML(day)+biCardHTML();
 }
 
 /* ============================== FOODS ============================== */
@@ -2278,7 +2289,14 @@ function biCardHTML(){
   }
   return h+'</section>';
 }
-function completeTodayHTML(day){
+/* Day completion at the top of Today. Uses the existing isComplete/setComplete (bflfood_daystatus) for the selected date.
+   A day can only be complete when food is logged for it (unchanged rule), so with nothing logged the button is shown but inactive. */
+function dayCompleteHTML(day){
+  var has=(loadDiary()[day]||[]).length>0,done=isComplete(day),isT=day===todayISO(),lbl=isT?"today":dayLabel(day)==="Yesterday"?"yesterday":dayLabel(day);
+  if(done)return '<div class="dc-wrap"><button type="button" class="dc-btn done" data-bi-uncomplete="'+day+'" aria-pressed="true" aria-label="'+esc((isT?"Today":dayLabel(day))+" is completed. Tap to undo completion")+'">✓ Day completed</button><button type="button" class="dc-undo" data-bi-uncomplete="'+day+'">Undo completion</button></div>';
+  return '<div class="dc-wrap"><button type="button" class="dc-btn" '+(has?'data-bi-complete="'+day+'"':'disabled aria-disabled="true"')+' aria-pressed="false" aria-label="'+esc(has?"Mark "+lbl+" complete":"Log food first to mark "+lbl+" complete")+'">✓ Mark day complete</button>'+(has?'':'<span class="dc-hint">Log food first</span>')+'</div>';
+}
+function completeTodayHTML(day){ /* old diary-bottom control, no longer shown on Today */
   if(!(loadDiary()[day]||[]).length)return "";
   var isT=day===todayISO();
   return isComplete(day)?'<p class="bi-done">✓ '+(isT?'Today is':'This day is')+' marked complete <button type="button" class="linkbtn" data-bi-uncomplete="'+day+'" style="min-height:0;padding:0 4px;font-size:15px">Undo</button></p>'
@@ -2295,7 +2313,7 @@ document.addEventListener("click",function(ev){
   if(t.hasAttribute("data-bi-toggle")){setUi({biOpen:!ui().biOpen});render();return;}
   if(t.hasAttribute("data-bir")){APP.bir=+t.getAttribute("data-bir");render();return;}
   if(t.hasAttribute("data-bi-complete")){var d=t.getAttribute("data-bi-complete");setComplete(d,true);render();toast(d===todayISO()?"Today marked complete":dShort(d)+" marked complete",function(){setComplete(d,false);render();toast("Undone");});return;}
-  if(t.hasAttribute("data-bi-uncomplete")){setComplete(t.getAttribute("data-bi-uncomplete"),false);render();return;}
+  if(t.hasAttribute("data-bi-uncomplete")){var ud=t.getAttribute("data-bi-uncomplete");setComplete(ud,false);render();toast("Completion undone",function(){setComplete(ud,true);render();toast(ud===todayISO()?"Today marked complete":dShort(ud)+" marked complete");});return;}
   if(t.hasAttribute("data-bictx")){APP.bictx=t.getAttribute("data-bictx");render();return;}
   if(t.hasAttribute("data-bi-act")){var day=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO(),a=dayCtx(day).act,v=t.getAttribute("data-bi-act"),i=a.indexOf(v);if(i>=0)a.splice(i,1);else{a.push(v);if(v==="rest")a=a.filter(function(x){return x!=="strength"&&x!=="cardio";});else if(v==="strength"||v==="cardio")a=a.filter(function(x){return x!=="rest";});}setDayCtx(day,{act:a});render();return;}
   if(t.hasAttribute("data-bi-csym")){var dyc=APP.bictx==="y"?dayAdd(todayISO(),-1):todayISO(),cs=dayCtx(dyc).cycleSym,cv=t.getAttribute("data-bi-csym"),ci=cs.indexOf(cv);if(ci>=0)cs.splice(ci,1);else cs.push(cv);setDayCtx(dyc,{cycleSym:cs});render();return;}
