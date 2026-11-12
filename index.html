@@ -16,6 +16,7 @@
   Three tabs: Today, Foods, Me. Data keys (bflfood_*) are the same as version 1, so logged food,
   your plan, food profile, favourites, own foods and weight check-ins carry over.
   The engine (calculations, food list, barcode lookup, safety checks) is copied unchanged.
+  Nov 2026: Me → Data & Backup: full JSON backup (all bflfood_* keys), verified restore (replace or merge), nutrition CSV report.
   Nov 2026: "Mark day complete" moved to the top of Today (same completion data).
   Oct 2026: Fibre and total sugar rows in the main overview on Today (fibre and total/added sugar, read from logged portions; never changes kcal or carbs).
   Oct 2026: Smart Fuel Coach on Today (rule-based guidance, meal planning and suggestions; never logs on its own).
@@ -266,6 +267,11 @@ details.fold .fold-b{padding:0 18px 18px;display:flex;flex-direction:column;gap:
 .co-total{font-size:16px;color:var(--ink-2)}
 .co-over{color:var(--warn)}
 .pf-lbl{display:block;font-size:15px;font-weight:700;color:var(--ink-2);margin-bottom:6px}
+.bk-file{display:flex;align-items:center;justify-content:center;cursor:pointer;width:100%}
+.bk-tab th{font-weight:600;text-transform:none;letter-spacing:0;font-size:15px;color:var(--ink)}
+.bk-tab thead th{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.bk-confirm{display:flex;gap:12px;align-items:flex-start;font-size:16px;line-height:1.4;color:var(--ink);padding:4px 0}
+.bk-confirm input{width:24px;height:24px;flex:none;margin-top:1px;accent-color:var(--btn)}
 .pf-wrap{display:flex;align-items:center;gap:8px}
 .pf-wrap .inp{flex:1;min-width:0}
 .pf-suf{font-size:16px;font-weight:700;color:var(--muted);min-width:30px}
@@ -1628,6 +1634,7 @@ function viewMe(){
   else wb+='<p class="muted">Weigh in a few mornings a week. The trend appears after 2 weeks.</p>';
   if(recent.length)wb+=recent.map(function(e){return '<div class="row" style="cursor:default"><span class="n">'+esc(fmtDate(e.date))+'</span><span class="k">'+fmtN(e.weight)+' kg</span></div>';}).join('');
   h+=fold("me-weight","Weight",wb,false);
+  h+=fold("me-data","Data &amp; Backup",bkFoldHTML(),false);
   return h;
 }
 
@@ -3324,6 +3331,269 @@ document.addEventListener("change",function(ev){
   if(t.hasAttribute("data-co-alloc")){var m=t.getAttribute("data-co-alloc"),v2=num(t.value),ed=Object.assign({},coDay(s.day).edited);if(v2==null||v2<0)delete ed[m];else ed[m]=Math.round(v2);coSet(s.day,{edited:ed});coRerender();coSavedFeedback();return;}
 });
 
+/* ============================== DATA & BACKUP ==============================
+   Me → Data & Backup: full JSON backup, restore (replace or merge), nutrition CSV report.
+   WHAT IS INCLUDED: every localStorage key that starts with "bflfood_" (found when you export, so new data is included
+   automatically). That is all BFL FOOD data: diary, Food Library (with categories and icons), favourites, scanner favourites
+   and serving units, targets, phases, saved daily targets, fibre setting, Body Intelligence check-ins, morning checks,
+   Body Signals / Food Detective, notes, insights, completed days, creatine, Smart Fuel Coach and Smart Fuel data, kitchen,
+   ideas, spoon weights, food profile and appearance/settings. Keys of other apps on the same site are never read or
+   written. BFL FOOD stores no passwords, tokens or API keys. Keys starting with "bflfood__" are reserved and excluded.
+   FILE: {app:"bfl-food", schema:1, exportedAt, appVersion, origin, counts, data:{"bflfood_…": value, …}}
+   RESTORE is transactional: everything is checked and prepared first; current data is snapshotted; keys are written;
+   every key is read back and compared. Any error → the snapshot is written back, so the original data stays intact.
+   MERGE RULES (by stored ids, never by names):
+   - records with an id (diary entries "id", foods "id", favourites "favId", check-ins "id", …): missing → added;
+     same id and identical → skipped as duplicate; same id but different → yours kept, counted as a conflict.
+   - date-keyed records (completed days, creatine, saved targets, coach): missing date → added; identical → skipped;
+     different → yours kept (conflict).
+   - settings (one value per key): missing → added; identical → skipped; different → yours kept (conflict).
+   Nothing in your current data is ever overwritten or removed by a merge. */
+var BK_APP="bfl-food",BK_SCHEMA=1,BFL_FOOD_VERSION="2026.11.12",BK_PREFIX="bflfood_";
+var BK_INFO={diary:"Food diary",customfoods:"Food Library products",favs:"Favourites",offfav:"Scanner favourites",servingunits:"Serving units",
+  fuel:"Targets, plan and phase settings",goals:"Goals",nutrition_v1:"Nutrition phases",targets_v1:"Saved daily targets",nutridetails:"Fibre reference",
+  progress:"Body Intelligence check-ins and weight",mornings:"Morning check-ins",signals:"Body Signals / Food Detective",notes:"Notes",insights:"Insights",
+  daystatus:"Completed days",creatine:"Creatine",coach_v1:"Smart Fuel Coach",ideas_v1:"Saved meal ideas",kitchen_v1:"My Kitchen",smartfuel_v1:"Smart Fuel settings",
+  spoons:"Spoon weights",profile:"Food profile",ui:"Appearance and app settings"};
+var BK_ARRAYS=["customfoods","favs","progress","mornings","signals","notes"],BK_DATEMAPS=["daystatus","creatine","targets_v1","coach_v1"];
+function bkName(k){var s=k.slice(BK_PREFIX.length);return BK_INFO[s]||s.replace(/_/g," ");}
+function bkKeys(){var L=[];try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(BK_PREFIX)===0&&k.indexOf("bflfood__")!==0)L.push(k);}}catch(e){}return L.sort();}
+function bkIsObj(v){return v!==null&&typeof v==="object"&&!Array.isArray(v);}
+function bkIsDate(k){return /^\d{4}-\d{2}-\d{2}$/.test(k);}
+/* ---------- counts used for previews and the restore summary ---------- */
+function bkCounts(data){
+  var g=function(s){return data[BK_PREFIX+s];},len=function(v){return Array.isArray(v)?v.length:bkIsObj(v)?Object.keys(v).length:0;};
+  var D=g("diary"),entries=0,days=0,first=null,last=null;
+  if(bkIsObj(D))Object.keys(D).forEach(function(d){var L=D[d];if(Array.isArray(L)&&L.length){days++;entries+=L.length;if(!first||d<first)first=d;if(!last||d>last)last=d;}});
+  var catKeys={diary:1,customfoods:1,favs:1,offfav:1,progress:1,mornings:1,signals:1,daystatus:1,creatine:1,targets_v1:1,coach_v1:1};
+  var settings=Object.keys(data).filter(function(k){return !catKeys[k.slice(BK_PREFIX.length)];}).length;
+  return {entries:entries,days:days,first:first,last:last,foods:len(g("customfoods")),favs:len(g("favs"))+len(g("offfav")),
+    bi:len(g("progress"))+len(g("mornings"))+len(g("signals")),daily:len(g("daystatus"))+len(g("creatine"))+len(g("targets_v1"))+len(g("coach_v1")),
+    completed:bkIsObj(g("daystatus"))?Object.keys(g("daystatus")).filter(function(d){return g("daystatus")[d]&&g("daystatus")[d].complete;}).length:0,
+    settings:settings,sections:Object.keys(data).length};
+}
+function bkCurrent(){var o={},bad=[];bkKeys().forEach(function(k){var raw=localStorage.getItem(k);try{o[k]=JSON.parse(raw);}catch(e){o[k]={__raw:raw};bad.push(k);}});return {data:o,bad:bad};}
+/* ---------- export ---------- */
+function bkBuild(){
+  var C=bkCurrent();
+  return {app:BK_APP,appName:"Body Fuel Lab – Food Tracker (BFL FOOD)",schema:BK_SCHEMA,exportedAt:new Date().toISOString(),appVersion:BFL_FOOD_VERSION,
+    origin:location.origin+location.pathname,counts:bkCounts(C.data),data:C.data};
+}
+function bkSaveFile(name,text,mime,okMsg){
+  try{var blob=new Blob([text],{type:mime});
+    var ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+    if(ios&&navigator.canShare&&window.File){var file=new File([blob],name,{type:mime});
+      if(navigator.canShare({files:[file]})){navigator.share({files:[file],title:name}).then(function(){toast(okMsg);}).catch(function(err){if(!err||err.name!=="AbortError")bkAnchor(blob,name,okMsg);else toast("Not saved");});return;}}
+    bkAnchor(blob,name,okMsg);
+  }catch(err){toast("Couldn’t create the file here. Try the GitHub Pages version.");}
+}
+function bkAnchor(blob,name,okMsg){var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},4000);toast(okMsg);}
+function bkExport(){var B=bkBuild();bkSaveFile("BFL-FOOD-backup-"+todayISO()+".json",JSON.stringify(B,null,1),"application/json","Backup created: "+B.counts.entries+" diary entries, "+B.counts.foods+" foods");return B;}
+/* ---------- validate an imported file (nothing is written here) ---------- */
+function bkValidate(text){
+  var errs=[],B;
+  if(typeof text!=="string"||!text.trim())return {err:["The file is empty."]};
+  if(text.length>25*1024*1024)return {err:["The file is too large to be a BFL FOOD backup."]};
+  try{B=JSON.parse(text.replace(/^﻿/,""));}catch(e){return {err:["This isn’t a valid JSON file, so it can’t be a BFL FOOD backup."]};}
+  if(!bkIsObj(B))return {err:["The file doesn’t have the BFL FOOD backup structure."]};
+  if(B.app!==BK_APP)return {err:["This isn’t a BFL FOOD backup (it’s missing the BFL FOOD app identifier)."]};
+  if(typeof B.schema!=="number"||B.schema<1||Math.floor(B.schema)!==B.schema)return {err:["The backup’s schema version is missing or invalid."]};
+  if(B.schema>BK_SCHEMA)return {err:["This backup was made by a newer BFL FOOD (schema "+B.schema+"). Update the app first; this version reads schema "+BK_SCHEMA+"."]};
+  if(!bkIsObj(B.data))return {err:["The backup has no data section."]};
+  var keys=Object.keys(B.data),skipped=[];
+  if(!keys.length)return {err:["The backup contains no data."]};
+  keys.forEach(function(k){
+    if(k.indexOf(BK_PREFIX)!==0||k.indexOf("bflfood__")===0){skipped.push(k);return;}
+    var s=k.slice(BK_PREFIX.length),v=B.data[k];
+    if(bkIsObj(v)&&"__raw" in v&&Object.keys(v).length===1){if(typeof v.__raw!=="string")errs.push(bkName(k)+": invalid stored text.");return;}
+    if(s==="diary"){if(!bkIsObj(v)){errs.push("Food diary: expected dates.");return;}
+      Object.keys(v).forEach(function(d){if(!bkIsDate(d))errs.push("Food diary: “"+d+"” isn’t a date.");else if(!Array.isArray(v[d]))errs.push("Food diary "+d+": expected a list of entries.");
+        else v[d].forEach(function(e,i){if(!bkIsObj(e)||typeof e.id!=="string"||!Array.isArray(e.items))errs.push("Food diary "+d+", entry "+(i+1)+": missing id or items.");});});return;}
+    if(BK_ARRAYS.indexOf(s)>=0){if(!Array.isArray(v))errs.push(bkName(k)+": expected a list.");else if(v.some(function(x){return !bkIsObj(x);}))errs.push(bkName(k)+": contains invalid records.");
+      else if(s==="customfoods"&&v.some(function(x){return typeof x.id!=="string"||typeof x.name!=="string"||!bkIsObj(x.per100);}))errs.push("Food Library products: a product is missing its id, name or nutrition values.");
+      else if(s==="favs"&&v.some(function(x){return typeof x.favId!=="string";}))errs.push("Favourites: a favourite is missing its id.");return;}
+    if(BK_DATEMAPS.indexOf(s)>=0&&!bkIsObj(v))errs.push(bkName(k)+": expected dates.");
+  });
+  if(errs.length)return {err:errs.slice(0,6).concat(errs.length>6?["…and "+(errs.length-6)+" more problems."]:[])};
+  var data={};keys.forEach(function(k){if(skipped.indexOf(k)<0)data[k]=B.data[k];});
+  if(!Object.keys(data).length)return {err:["The backup contains no BFL FOOD data."]};
+  return {B:B,data:data,skipped:skipped,counts:bkCounts(data)};
+}
+/* ---------- merge (pure: returns the merged values and what happened; nothing is written) ---------- */
+function bkIdField(list){var F=["id","favId","code","barcode"];for(var i=0;i<F.length;i++){var f=F[i];if(list.length&&list.every(function(x){return bkIsObj(x)&&(typeof x[f]==="string"||typeof x[f]==="number");}))return f;}return null;}
+function bkSame(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+function bkMergeArray(L,B,st,label){
+  var f=bkIdField(L.concat(B));
+  if(!f){if(bkSame(L,B)){st.dup+=B.length;return L;}if(!L.length){st.added+=B.length;return B.slice();}st.conflicts.push(label+": different lists without ids — yours kept");st.conf++;return L;}
+  var out=L.slice(),idx={};L.forEach(function(x,i){idx[String(x[f])]=i;});
+  B.forEach(function(x){var id=String(x[f]);if(!(id in idx)){out.push(x);idx[id]=out.length-1;st.added++;}else if(bkSame(out[idx[id]],x))st.dup++;else{st.conf++;st.conflicts.push(label+": “"+(x.name||id)+"” has different content — yours kept");}});
+  return out;
+}
+function bkMergeKey(k,L,B,st){
+  var s=k.slice(BK_PREFIX.length),label=bkName(k);
+  if(L===undefined){st.added+=Array.isArray(B)?B.length:bkIsObj(B)&&(s==="diary"||BK_DATEMAPS.indexOf(s)>=0)?Object.keys(B).reduce(function(n,d){return n+(Array.isArray(B[d])?B[d].length:1);},0):1;st.newKeys++;return B;}
+  if(Array.isArray(L)&&Array.isArray(B))return bkMergeArray(L,B,st,label);
+  var isMap=bkIsObj(L)&&bkIsObj(B)&&(s==="diary"||BK_DATEMAPS.indexOf(s)>=0||(Object.keys(B).length&&Object.keys(B).every(bkIsDate)&&Object.keys(L).every(bkIsDate)));
+  if(isMap){var out=Object.assign({},L);
+    Object.keys(B).forEach(function(d){
+      if(!(d in out)){out[d]=B[d];st.added+=Array.isArray(B[d])?B[d].length:1;}
+      else if(Array.isArray(out[d])&&Array.isArray(B[d]))out[d]=bkMergeArray(out[d],B[d],st,label+" "+d);
+      else if(bkSame(out[d],B[d]))st.dup++;
+      else{st.conf++;st.conflicts.push(label+" "+d+": different — yours kept");}});
+    return out;}
+  if(bkSame(L,B)){st.dup++;return L;}
+  st.conf++;st.conflicts.push(label+": your current settings differ — yours kept (use Replace to take the backup’s)");return L;
+}
+/* plan = the exact strings that will be written, plus keys to remove (replace only) */
+function bkPlan(V,mode){
+  var cur=bkCurrent(),plan={mode:mode,write:{},remove:[],st:{added:0,dup:0,conf:0,newKeys:0,conflicts:[]}};
+  Object.keys(V.data).forEach(function(k){var v=V.data[k];
+    var val=mode==="replace"?v:bkMergeKey(k,k in cur.data?cur.data[k]:undefined,v,plan.st);
+    var str=bkIsObj(val)&&"__raw" in val&&Object.keys(val).length===1?val.__raw:JSON.stringify(val);
+    if(localStorage.getItem(k)!==str)plan.write[k]=str;});
+  if(mode==="replace")bkKeys().forEach(function(k){if(!(k in V.data))plan.remove.push(k);});
+  return plan;
+}
+/* ---------- apply: snapshot → write → verify → (rollback on any problem) ---------- */
+function bkApply(plan){
+  var snap={},touched=Object.keys(plan.write).concat(plan.remove);
+  touched.forEach(function(k){snap[k]=localStorage.getItem(k);});
+  function rollback(){var ok=true;touched.forEach(function(k){try{if(snap[k]==null)localStorage.removeItem(k);else localStorage.setItem(k,snap[k]);}catch(e){ok=false;}});
+    touched.forEach(function(k){if(localStorage.getItem(k)!==snap[k])ok=false;});return ok;}
+  try{
+    Object.keys(plan.write).forEach(function(k){localStorage.setItem(k,plan.write[k]);});
+    plan.remove.forEach(function(k){localStorage.removeItem(k);});
+    var bad=Object.keys(plan.write).filter(function(k){return localStorage.getItem(k)!==plan.write[k];}).concat(plan.remove.filter(function(k){return localStorage.getItem(k)!==null;}));
+    if(bad.length)throw new Error("Verification failed for: "+bad.map(bkName).join(", "));
+    Object.keys(plan.write).forEach(function(k){JSON.parse(localStorage.getItem(k));});   /* every written value must read back as data */
+    return {ok:true};
+  }catch(e){var rb=rollback();
+    return {ok:false,msg:(/quota/i.test(String(e&&e.name)+String(e&&e.message))?"There isn’t enough storage space on this device for the backup.":String(e&&e.message||e)),rolledBack:rb};}
+}
+/* ---------- screens ---------- */
+function bkFoldHTML(){
+  var C=bkCounts(bkCurrent().data);
+  return '<p class="muted">Keep a copy of everything in BFL FOOD, move to another device, or get a spreadsheet of what you ate.</p>'
+    +'<p class="small" style="color:var(--ink-2)">On this device now: '+fmtN(C.entries)+' diary entries over '+fmtN(C.days)+' days, '+fmtN(C.foods)+' Food Library products, '+fmtN(C.bi)+' Body Intelligence records.</p>'
+    +'<button type="button" class="btn-main" data-act="bk-export">Export full backup</button>'
+    +'<button type="button" class="btn-line" data-act="bk-restore">Import / Restore backup</button>'
+    +'<button type="button" class="btn-line" data-act="bk-csv">Export nutrition report (CSV)</button>'
+    +'<p class="muted small">The backup is a JSON file you can save to Files, iCloud Drive or a computer. It contains only BFL FOOD data, nothing from other apps.</p>';
+}
+function bkRows(c){return [["Diary entries",c.entries],["Days with food logged",c.days],["Food Library products",c.foods],["Favourites",c.favs],["Body Intelligence records",c.bi],["Daily records",c.daily],["Completed days",c.completed],["Settings sections",c.settings]];}
+function bkRestoreHTML(s){
+  var h='';
+  if(s.result){var r=s.result;
+    if(r.ok){h+='<div class="note pf-ok" role="status">✓ Restore complete and verified</div><p>Every section was written and read back successfully.</p><table class="qe-tab bk-tab"><tbody>'
+      +[["Food diary records "+(r.mode==="merge"?"added":"restored"),r.c.entries],["Custom foods "+(r.mode==="merge"?"added":"restored"),r.c.foods],["Body Intelligence records",r.c.bi],["Daily records",r.c.daily],["Settings sections",r.c.settings],["Skipped as duplicates",r.dup],["Conflicts (yours kept)",r.conf],["Rejected sections (not BFL FOOD)",r.rejected]].map(function(x){return '<tr><th>'+esc(x[0])+'</th><td>'+fmtN(x[1]||0)+'</td></tr>';}).join('')+'</tbody></table>'
+        +(r.conflicts&&r.conflicts.length?'<details class="fold"><summary><span>Conflicts ('+r.conflicts.length+')</span></summary><div class="fold-b"><ul class="qe-notes">'+r.conflicts.slice(0,40).map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div></details>':'')
+        +'<button type="button" class="btn-main" data-act="bk-reload">Done — reload the app</button>';}
+    else h+='<div class="note alert" role="alert"><b>Restore stopped. Nothing was changed.</b><br>'+esc(r.msg)+(r.rolledBack===false?'<br><b>Warning:</b> some data couldn’t be put back automatically. Use the backup you downloaded before restoring.':'')+'</div><button type="button" class="btn-line" data-act="bk-restore-again">Choose another file</button>';
+    return h;}
+  h+='<p class="muted">Choose a BFL FOOD backup file (.json). Nothing changes until you confirm.</p>'
+    +'<label class="btn-line bk-file">Choose backup file<input type="file" id="bk-file" accept=".json,application/json,text/plain" hidden></label>';
+  if(s.err)h+='<div class="note alert" role="alert"><b>This file can’t be restored.</b><br>'+s.err.map(esc).join('<br>')+'<br><span class="small">Your current data has not been changed.</span></div>';
+  if(!s.V)return h;
+  var V=s.V,B=V.B,cur=bkCounts(bkCurrent().data),c=V.counts;
+  h+='<div class="sf-idea"><p class="eyebrow">Backup found</p><p><b>'+esc(s.fileName||"backup")+'</b></p><p class="small">Made '+esc(B.exportedAt?new Date(B.exportedAt).toLocaleString("da-DK",{dateStyle:"medium",timeStyle:"short"}):"(date unknown)")+(B.appVersion?' · app '+esc(B.appVersion):'')+' · schema '+B.schema+'</p>'
+    +(c.first?'<p class="small">Diary from '+esc(fmtDate(c.first))+' to '+esc(fmtDate(c.last))+'</p>':'')
+    +'<table class="qe-tab bk-tab"><thead><tr><th></th><th>Backup</th><th>Now</th></tr></thead><tbody>'+bkRows(c).map(function(x,i){return '<tr><th>'+x[0]+'</th><td>'+fmtN(x[1])+'</td><td>'+fmtN(bkRows(cur)[i][1])+'</td></tr>';}).join('')+'</tbody></table>'
+    +(V.skipped.length?'<p class="muted small">'+V.skipped.length+' section(s) in the file aren’t BFL FOOD data and will be ignored.</p>':'')+'</div>';
+  h+='<p class="pf-lbl">How do you want to restore?</p><div class="seg" role="radiogroup" aria-label="Restore mode"><button type="button" role="radio" aria-checked="'+(s.mode==="merge")+'" class="'+(s.mode==="merge"?'on':'')+'" data-bk-mode="merge">Merge</button><button type="button" role="radio" aria-checked="'+(s.mode==="replace")+'" class="'+(s.mode==="replace"?'on':'')+'" data-bk-mode="replace">Replace</button></div>';
+  var P=bkPlan(V,s.mode);
+  if(s.mode==="merge")h+='<p class="small">Adds what’s missing and keeps everything you have. Records are matched by their saved ids, never by name.</p><ul class="qe-notes"><li>To add: '+fmtN(P.st.added)+' record(s)</li><li>Already here (skipped): '+fmtN(P.st.dup)+'</li><li>Conflicts, yours kept: '+fmtN(P.st.conf)+'</li></ul>';
+  else h+='<div class="note warn"><b>Replace makes the backup your saved data.</b> Everything in BFL FOOD on this device is replaced by the backup, including entries and foods added since it was made. Other apps are not affected.</div>'
+    +'<button type="button" class="btn-line" data-act="bk-save-current">'+(s.savedCurrent?'✓ Current data downloaded — download again':'Download a backup of my current data first')+'</button>';
+  var nothing=!Object.keys(P.write).length&&!P.remove.length;
+  h+='<label class="bk-confirm"><input type="checkbox" id="bk-ok"'+(s.ok?' checked':'')+'> <span>'+(s.mode==="replace"?'I understand that my current BFL FOOD data will be replaced'+(s.savedCurrent?'':' and that I haven’t downloaded a copy of it'):'I’ve checked the preview')+'</span></label>'
+    +'<button type="button" class="btn-main" data-act="bk-apply"'+(s.ok&&!nothing?'':' disabled')+'>'+(nothing?'Nothing to change':s.mode==="replace"?'Replace my data with this backup':'Merge into my data')+'</button>';
+  return h;
+}
+/* ---------- CSV nutrition report ---------- */
+var BK_RANGES=[["7","Last 7 days"],["30","Last 30 days"],["90","Last 90 days"],["all","All history"],["custom","Custom"]];
+function bkRange(s){var t=todayISO(),D=loadDiary(),days=Object.keys(D).filter(function(d){return bkIsDate(d)&&Array.isArray(D[d])&&D[d].length;}).sort();
+  if(s.range==="all")return {from:days[0]||t,to:days[days.length-1]>t?days[days.length-1]:t};
+  if(s.range==="custom"){var f=s.from||t,to=s.to||t;return f<=to?{from:f,to:to}:{from:to,to:f};}
+  var n=+s.range||7,d=parseISO(t);d.setDate(d.getDate()-(n-1));return {from:isoOf(d),to:t};}
+function isoOf(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function bkNum(v,dec){if(v==null||!isFinite(v))return "";var m=Math.pow(10,dec==null?1:dec);return String(Math.round(v*m)/m).replace(".",",");}
+var BK_COLS=["Date","Row type","Meal","Entry","Food","Quantity","Unit","Calories (kcal)","Protein (g)","Carbohydrates (g)","Fat (g)","Fibre (g)","Total sugar (g)","Fluids (ml)","Calorie target (kcal)","Protein target (g)","Carbohydrate target (g)","Fat target (g)","Target source","Training / recovery","Day completed","Missing values"];
+function bkCSV(from,to){
+  var D=loadDiary(),f=loadFuel(),rows=[],nDays=0,nFoods=0,ACT={};CO_ACTS.forEach(function(a){ACT[a[0]]=a[1];});
+  Object.keys(D).filter(function(d){return bkIsDate(d)&&d>=from&&d<=to&&Array.isArray(D[d])&&D[d].length;}).sort().forEach(function(day){
+    nDays++;var R=targetsForDay(day,f),act=(dayCtx(day).act||[]).map(function(a){return ACT[a]||a;}).join(", "),done=isComplete(day)?"Yes":"No";
+    var tgt=[bkNum(R.kcal,0),bkNum(R.protein,0),bkNum(R.carbs,0),bkNum(R.fat,0),R.kcal==null?"":R.tsrc==="saved"?"saved that day":R.tsrc==="current"?"current":"estimate"];
+    var T={kcal:0,p:0,c:0,f:0,fib:0,sug:0,fl:0},miss={kcal:0,p:0,c:0,f:0,fib:0,sug:0},n=0;
+    D[day].forEach(function(e){(e.items||[]).forEach(function(it){
+      n++;nFoods++;var q=(+it.qty||0)*(e.factor||1),p=portion(it.per100,q),pp=it.per100||{},sug=pp.sug!=null?pp.sug*q/100:null,water=it.src==="drink"&&(it.ref==="water"||it.ref==="sparkling");
+      if(water){p.fib=p.fib==null?0:p.fib;sug=0;}
+      var fl=e.drink&&it.unit==="ml"?q:null,mm=[];
+      ["kcal","p","c","f","fib"].forEach(function(k){if(p[k]==null)miss[k]++;else T[k]+=p[k];});if(sug==null)miss.sug++;else T.sug+=sug;if(fl!=null)T.fl+=fl;
+      [["kcal","calories"],["p","protein"],["c","carbs"],["f","fat"],["fib","fibre"]].forEach(function(x){if(p[x[0]]==null)mm.push(x[1]);});if(sug==null)mm.push("sugar");
+      rows.push([day,"Food",e.slot||"",e.name||"",it.name||"",bkNum(q,1),it.unit||"",bkNum(p.kcal,0),bkNum(p.p),bkNum(p.c),bkNum(p.f),bkNum(p.fib),bkNum(sug),fl==null?"":bkNum(fl,0)].concat(tgt,[act,done,mm.length?"not known: "+mm.join(", "):""]));
+    });});
+    var mt=[];[["kcal","calories"],["p","protein"],["c","carbs"],["f","fat"],["fib","fibre"],["sug","sugar"]].forEach(function(x){if(miss[x[0]])mt.push(x[1]+" for "+miss[x[0]]+" of "+n);});
+    rows.push([day,"Day total","","","","","",bkNum(T.kcal,0),bkNum(T.p),bkNum(T.c),bkNum(T.f),miss.fib===n?"":bkNum(T.fib),miss.sug===n?"":bkNum(T.sug),bkNum(T.fl,0)].concat(tgt,[act,done,mt.length?"not known: "+mt.join("; ")+" (totals include only known values)":""]));
+  });
+  var txt=[BK_COLS.join(";")].concat(rows.map(function(r){return r.map(csvCell).join(";");})).join("\r\n");
+  return {text:"﻿"+txt,days:nDays,foods:nFoods};
+}
+function bkCsvHTML(s){
+  var rg=bkRange(s),C=bkCSV(rg.from,rg.to);
+  var h='<p class="muted">A spreadsheet of what you ate, one row per food plus a total row per day. Opens in Excel and Numbers.</p><div class="chips" role="radiogroup" aria-label="Date range">'
+    +BK_RANGES.map(function(r){var on=s.range===r[0];return '<button type="button" class="chip'+(on?' on':'')+'" role="radio" aria-checked="'+on+'" data-bk-range="'+r[0]+'">'+r[1]+'</button>';}).join('')+'</div>';
+  if(s.range==="custom")h+='<div class="grid2"><div><label class="lbl" for="bk-from">From</label><input class="inp" type="date" id="bk-from" value="'+esc(rg.from)+'"></div><div><label class="lbl" for="bk-to">To</label><input class="inp" type="date" id="bk-to" value="'+esc(rg.to)+'"></div></div>';
+  h+='<p id="bk-csv-sum">'+esc(fmtDate(rg.from))+' – '+esc(fmtDate(rg.to))+': <b>'+fmtN(C.days)+' day'+(C.days===1?'':'s')+'</b> with food, '+fmtN(C.foods)+' food rows.</p>'
+    +'<p class="muted small">Separated by semicolons with decimal commas (Danish Excel and Numbers settings). Missing values are left empty, never written as 0. Sugar is part of carbohydrates and isn’t added twice.</p>'
+    +'<button type="button" class="btn-main" data-act="bk-csv-go"'+(C.days?'':' disabled')+'>Export CSV</button>';
+  return h;
+}
+/* ---------- events ---------- */
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("button");if(!t)return;var s=APP.sheet;
+  if(t.hasAttribute("data-bk-mode")&&s&&s.view==="bk-restore"){s.mode=t.getAttribute("data-bk-mode");s.ok=false;renderSheet();return;}
+  if(t.hasAttribute("data-bk-range")&&s&&s.view==="bk-csv"){s.range=t.getAttribute("data-bk-range");renderSheet();return;}
+  var a=t.getAttribute("data-act");if(!a||a.indexOf("bk-")!==0)return;
+  if(a==="bk-export"){bkExport();return;}
+  if(a==="bk-restore"||a==="bk-restore-again"){openSheet({view:"bk-restore",mode:"merge"});return;}
+  if(a==="bk-csv"){openSheet({view:"bk-csv",range:"30"});return;}
+  if(a==="bk-save-current"&&s){bkExport();s.savedCurrent=true;s.ok=false;renderSheet();return;}
+  if(a==="bk-csv-go"&&s){var rg=bkRange(s),C=bkCSV(rg.from,rg.to);bkSaveFile("BFL-FOOD-nutrition-"+rg.from+"_to_"+rg.to+".csv",C.text,"text/csv;charset=utf-8","CSV exported: "+C.days+" days, "+C.foods+" foods");return;}
+  if(a==="bk-reload"){location.reload();return;}
+  if(a==="bk-apply"&&s&&s.V&&!s.busy){
+    if(!$("#bk-ok")||!$("#bk-ok").checked)return;
+    s.busy=true;var P=bkPlan(s.V,s.mode),res=bkApply(P);
+    if(res.ok){var after=bkCurrent().data,c=s.mode==="replace"?bkCounts(after):{entries:0,foods:0,bi:0,daily:0,settings:0};
+      if(s.mode==="merge"){/* what was actually added */var before=s.beforeCounts||{};var now=bkCounts(after);["entries","foods","bi","daily","settings"].forEach(function(k){c[k]=Math.max(0,(now[k]||0)-(before[k]||0));});}
+      /* verify the result really holds the backup's records */
+      var miss=bkVerify(s.V,after,s.mode);
+      if(miss.length){var rb=bkApply({write:bkSnapStrings(s.snapBefore),remove:Object.keys(after).filter(function(k){return !(k in s.snapBefore);})});res={ok:false,msg:"Verification found missing records ("+miss.slice(0,3).join(", ")+"). Your previous data was put back.",rolledBack:rb.ok};}
+      else res={ok:true,mode:s.mode,c:c,dup:P.st.dup,conf:P.st.conf,conflicts:P.st.conflicts,rejected:s.V.skipped.length};}
+    s.result=res;s.busy=false;renderSheet();toast(res.ok?"Restore verified":"Restore stopped — nothing changed");return;}
+});
+function bkSnapStrings(snapObj){var o={};Object.keys(snapObj).forEach(function(k){o[k]=snapObj[k];});return o;}
+/* every diary entry, food, favourite and check-in id in the backup must exist after the restore */
+function bkVerify(V,after,mode){
+  var miss=[],chk=function(key,f){var b=V.data[key],a=after[key];if(!Array.isArray(b))return;var ids={};(Array.isArray(a)?a:[]).forEach(function(x){if(x)ids[String(x[f])]=1;});b.forEach(function(x){if(x&&x[f]!=null&&!ids[String(x[f])])miss.push(bkName(key)+" "+x[f]);});};
+  chk(BK_PREFIX+"customfoods","id");chk(BK_PREFIX+"favs","favId");chk(BK_PREFIX+"progress","id");chk(BK_PREFIX+"signals","id");chk(BK_PREFIX+"mornings","id");
+  var bd=V.data[BK_PREFIX+"diary"],ad=after[BK_PREFIX+"diary"]||{};
+  if(bkIsObj(bd))Object.keys(bd).forEach(function(d){var ids={};(ad[d]||[]).forEach(function(e){ids[e.id]=1;});(bd[d]||[]).forEach(function(e){if(!ids[e.id])miss.push("diary "+d+" "+e.id);});});
+  if(mode==="replace")Object.keys(V.data).forEach(function(k){if(!bkSame(after[k],V.data[k])&&!(bkIsObj(V.data[k])&&"__raw" in V.data[k]))miss.push(bkName(k));});
+  return miss;
+}
+document.addEventListener("change",function(ev){
+  var t=ev.target,s=APP.sheet;if(!s)return;
+  if(t.id==="bk-ok"&&s.view==="bk-restore"){s.ok=t.checked;var b=$('[data-act="bk-apply"]');if(b&&b.textContent!=="Nothing to change")b.disabled=!t.checked;return;}
+  if((t.id==="bk-from"||t.id==="bk-to")&&s.view==="bk-csv"){if(/^\d{4}-\d{2}-\d{2}$/.test(t.value)){s[t.id==="bk-from"?"from":"to"]=t.value;renderSheet();}return;}
+  if(t.id==="bk-file"&&s.view==="bk-restore"){
+    var f=t.files&&t.files[0];if(!f)return;
+    s.V=null;s.err=null;s.ok=false;s.savedCurrent=false;s.fileName=f.name;
+    var rd=new FileReader();
+    rd.onload=function(){var V=bkValidate(String(rd.result||""));if(V.err){s.err=V.err;s.V=null;}else{s.V=V;var C=bkCurrent();s.snapBefore={};bkKeys().forEach(function(k){s.snapBefore[k]=localStorage.getItem(k);});s.beforeCounts=bkCounts(C.data);}renderSheet();};
+    rd.onerror=function(){s.err=["The file couldn’t be read."];renderSheet();};
+    rd.readAsText(f);return;}
+});
+
 /* ============================== render ============================== */
 var TABS=[["today","Today",'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'],["foods","Foods",'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'],["signals","Signals",'<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>'],["me","Me",'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>']];
 document.addEventListener("click",function(ev){var a=ev.target.closest&&ev.target.closest("#bfl-training-link");if(!a)return;
@@ -4169,6 +4439,8 @@ function renderSheet(focus){
   else if(s.view==="calendar"){title="Choose a date";body=calendarHTML();}
   else if(s.view==="qe"){title="Quick Estimate";back=!!s.from;body=qeHTML(s);}
   else if(s.view==="smartfuel"){title="Snack ideas & My Kitchen";body=smartFuelSheetHTML(s);}
+  else if(s.view==="bk-restore"){title="Import / Restore backup";body=bkRestoreHTML(s);}
+  else if(s.view==="bk-csv"){title="Nutrition report (CSV)";body=bkCsvHTML(s);}
   else if(s.view==="cohelp"){title="Smart Fuel Coach";body=coHelpHTML(s);}
   else if(s.view==="coplan"){title="Plan my remaining meals";body=coPlanHTML(s);}
   else if(s.view==="phase"){title="My Nutrition Phase";body=phaseSheetHTML(s);}
@@ -4410,7 +4682,7 @@ catMigrate();
 var _t=ui().tab2;if(_t==="notes"){_t="signals";APP.sgSeg="notes";}else APP.sgSeg=["notes","mornings"].indexOf(ui().sgSeg)>=0?ui().sgSeg:"detective";
 APP.tab=["today","foods","signals","me"].indexOf(_t)>=0?_t:"today";
 render();
-window.BFLFOOD={_debug:{foodEmoji:foodEmoji,autoEmoji:autoEmoji,emojiMatch:emojiMatch,catSuggest:catSuggest,catMigrate:catMigrate,libCat:libCat,LIB_CATS:LIB_CATS,ndTotals:ndTotals,ndPrefs:ndPrefs,CAT_SUGAR:CAT_SUGAR,coState:coState,coGuidance:coGuidance,coAlloc:coAlloc,coSuggest:coSuggest,coLearn:coLearn,coAll:coAll,sfRemaining:sfRemaining,openCoach:openCoach,libAll:libAll,ownFood:ownFood,qeMacros:qeMacros,qeBuildEntry:qeBuildEntry,qeRange:qeRange,qmCheck:qmCheck,qeEstimate:qeEstimate,qeTotals:qeTotals,qeSave:qeSave,openQE:openQE,dayTotals:dayTotals,FOOD_SRC:FOOD_SRC,FOODDB:FOODDB,dbFood:dbFood,sfFood:sfFood,baseDrink:baseDrink,searchResults:searchResults,APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
+window.BFLFOOD={_debug:{bkBuild:bkBuild,bkValidate:bkValidate,bkPlan:bkPlan,bkApply:bkApply,bkCounts:bkCounts,bkCSV:bkCSV,bkKeys:bkKeys,foodEmoji:foodEmoji,autoEmoji:autoEmoji,emojiMatch:emojiMatch,catSuggest:catSuggest,catMigrate:catMigrate,libCat:libCat,LIB_CATS:LIB_CATS,ndTotals:ndTotals,ndPrefs:ndPrefs,CAT_SUGAR:CAT_SUGAR,coState:coState,coGuidance:coGuidance,coAlloc:coAlloc,coSuggest:coSuggest,coLearn:coLearn,coAll:coAll,sfRemaining:sfRemaining,openCoach:openCoach,libAll:libAll,ownFood:ownFood,qeMacros:qeMacros,qeBuildEntry:qeBuildEntry,qeRange:qeRange,qmCheck:qmCheck,qeEstimate:qeEstimate,qeTotals:qeTotals,qeSave:qeSave,openQE:openQE,dayTotals:dayTotals,FOOD_SRC:FOOD_SRC,FOODDB:FOODDB,dbFood:dbFood,sfFood:sfFood,baseDrink:baseDrink,searchResults:searchResults,APP:APP,calcFuel:calcFuel,loadFuel:loadFuel,signalsCSV:signalsCSV,morningsCSV:morningsCSV,biConsistency:biConsistency,biPatterns:biPatterns,biFuel:biFuel,biInsights:biInsights,biSuggestions:biSuggestions,dayCtx:dayCtx,dayAdd:dayAdd,lastDays:lastDays,selDay:selDay,goDay:goDay,rankIdeas:rankIdeas,sfRemaining:sfRemaining,ideaTotals:ideaTotals,SF_IDEAS:SF_IDEAS,loadNutr:loadNutr,phaseTargets:phaseTargets,calcFuelBase:calcFuelBase,cuttingData:cuttingData,reviewFlags:reviewFlags,creatineAll:creatineAll,biWindow:biWindow,mcPatterns:mcPatterns,mcRecentFoods:mcRecentFoods,sgPatterns:sgPatterns}};
 })();
 </script>
 
